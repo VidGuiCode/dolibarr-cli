@@ -1,0 +1,15 @@
+node_modules/
+dist/
+coverage/
+.DS_Store
+Thumbs.db
+*.log
+.env
+.env.local
+.idea/
+.vscode/
+.claude/
+CLAUDE.md
+context/
+.obsidian/
+dolibarr-cli-*.tgz
