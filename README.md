@@ -18,6 +18,22 @@ npm run build
 npm link
 ```
 
+## Upgrading
+
+Once installed, the CLI can upgrade itself from GitHub Releases:
+
+```bash
+dolibarr upgrade           # show installed + latest version
+dolibarr upgrade check     # fetch the latest release info from GitHub
+dolibarr upgrade install   # download + install the latest .tgz via npm install -g
+```
+
+Every `dolibarr` command also prints a one-line reminder to **stderr** when a newer version is available (cache refreshed at most once every 24h). The reminder is suppressed automatically for piped / `--json` / non-TTY output, and can be turned off entirely:
+
+```bash
+export DOLIBARR_NO_UPDATE_CHECK=1
+```
+
 ## Setup
 
 ```bash

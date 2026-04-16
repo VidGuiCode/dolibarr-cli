@@ -2,17 +2,25 @@
 
 ## 0.1.2 — 2026-04-16
 
+### Added
+
+- **`dolibarr upgrade` command group** — self-upgrade the CLI from GitHub Releases without leaving the terminal. Three subcommands, no flags:
+  - `dolibarr upgrade` — shows installed version + cached latest + next step
+  - `dolibarr upgrade check` — fetches the latest release from GitHub and caches it
+  - `dolibarr upgrade install` — downloads the `.tgz` asset and runs `npm install -g` on it
+- **Update-available notice** — a one-line banner printed to stderr on every `dolibarr` run when a newer version is cached. Cached for 24h; refreshed in a detached background process so it never slows down commands. Suppressed automatically when stdout is piped/redirected, when `--json` is in use, on the `upgrade` command itself, and when the opt-out env var `DOLIBARR_NO_UPDATE_CHECK=1` is set. Goes to stderr, so piped JSON stays clean.
+- 32 new unit tests covering updater logic, cache round-trip, staleness boundaries, and banner suppression. Test total: 23 → 71 (16 added in the Phase 2 refactor, 32 added for the upgrade feature).
+- 16 earlier tests in this release cover the Phase 2 `resource-helpers.ts` module (option wiring, query building, dry-run envelope, payload pruning, confirm semantics).
+
 ### Changed
 
 - **Internal refactor**: extracted shared command boilerplate into `src/core/resource-helpers.ts`. The list-option wiring, dry-run envelope, pagination query shape, undefined-key pruning, and delete-confirmation prompt are now single helpers (`addListOptions`, `buildListQuery`, `dryRunJson`, `prunePayload`, `confirmOrCancel`) reused across 11 command files. No user-visible CLI behavior changes.
+- `src/core/config-store.ts` gained generic `readJson` / `writeJson` / `getUpdateCachePath` helpers, now shared by the config store and the update cache.
 - Removed unused `CHANGELOG` line from 0.1.0 that referenced gitignored documentation. See README and `docs/ROADMAP.md` for current reference material.
-
-### Added
-
-- 16 new unit tests covering `resource-helpers.ts` (option wiring, query building, dry-run envelope shape, payload pruning, confirm semantics). Test total: 23 → 39.
 
 ### Docs
 
+- `README.md` — added an "Upgrading" section documenting the `upgrade` subcommands and the `DOLIBARR_NO_UPDATE_CHECK` opt-out.
 - `docs/ROADMAP.md` — v0.2 is now documented as a **phased** program (Phase 2 refactor → Phase 3 cross-cutting features → Phase 4a/4b new resource groups → Phase 5 deep endpoint coverage) rather than a single monolithic release.
 
 ## 0.1.1 — 2026-04-16
