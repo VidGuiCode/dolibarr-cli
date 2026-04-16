@@ -5,7 +5,7 @@ Unofficial CLI for [Dolibarr ERP](https://www.dolibarr.org) — full REST API co
 ## Install
 
 ```bash
-npm install -g https://github.com/VidGuiCode/dolibarr-cli/releases/download/v0.2.1/dolibarr-cli-0.2.1.tgz
+npm install -g https://github.com/VidGuiCode/dolibarr-cli/releases/download/v0.2.2/dolibarr-cli-0.2.2.tgz
 ```
 
 Or for development:
@@ -93,6 +93,16 @@ dolibarr setup modules list
 dolibarr setup modules enable accounting
 dolibarr setup company show
 
+# Projects
+dolibarr projects list --status 1
+dolibarr projects get PJ2501-001             # ref-lookup
+dolibarr projects tasks 12 --with-timespent
+
+# Tickets
+dolibarr tickets list --thirdparty 5
+dolibarr tickets get --track-id abc123def456
+dolibarr tickets reply abc123def456 --message "Looking into this now."
+
 # Raw API (escape hatch)
 dolibarr raw GET /thirdparties
 dolibarr raw POST /invoices --body '{"socid": 1}'
@@ -163,6 +173,8 @@ dolibarr thirdparties create --name "Test" --supplier --dry-run
 | `documents` | File upload, download, listing |
 | `users` | User management |
 | `setup` | Modules, dictionaries, company config |
+| `projects` | Projects and tasks |
+| `tickets` | Support / help desk tickets |
 
 ## Development
 

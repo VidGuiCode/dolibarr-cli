@@ -20,6 +20,8 @@ import { createDocumentsCommand } from "./commands/documents.js";
 import { createUsersCommand } from "./commands/users.js";
 import { createSetupCommand } from "./commands/setup.js";
 import { createAccountingCommand } from "./commands/accounting.js";
+import { createProjectsCommand } from "./commands/projects.js";
+import { createTicketsCommand } from "./commands/tickets.js";
 import { createUpgradeCommand } from "./commands/upgrade.js";
 import {
   ensureFreshCacheOnColdStart,
@@ -71,6 +73,8 @@ program.addCommand(createDocumentsCommand());
 program.addCommand(createUsersCommand());
 program.addCommand(createSetupCommand());
 program.addCommand(createAccountingCommand());
+program.addCommand(createProjectsCommand());
+program.addCommand(createTicketsCommand());
 program.addCommand(createUpgradeCommand());
 
 configureHelp(program);

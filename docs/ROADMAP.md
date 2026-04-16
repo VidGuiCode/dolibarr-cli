@@ -81,16 +81,20 @@ The first **minor** bump of the v0.2 program. User-facing behavior:
 - **`--output table|json|csv`** — first-class CSV output on all `list` / `get` commands, with RFC 4180 escaping. `--json` remains as a shortcut for `--output json`.
 - **`--fields a,b,c`** — project a subset of columns in table/CSV output.
 
-### Phase 4a → v0.2.1 — `projects` + `tickets`
+### v0.2.1 — Cold-start banner hotfix (shipped 2026-04-17)
 
-- **`dolibarr projects`** — `list`, `get`, `create`, `update`, `delete`, `tasks`
-- **`dolibarr tickets`** — `list`, `get`, `create`, `update`, `delete`
+- Synchronous update-check on fresh installs with no cache (1500ms budget) so the banner can appear on the first-ever invocation.
 
-### Phase 4b → v0.2.2 — `contracts` + `shipments` + `receptions`
+### Phase 4a → v0.2.2 — `projects` + `tickets` (shipped 2026-04-17)
 
-- **`dolibarr contracts`** — `list`, `get`, `create`, `update`, `delete`, `activate-line`, `deactivate-line`
-- **`dolibarr shipments`** — `list`, `get`, `create`, `delete`, `validate`
-- **`dolibarr receptions`** — `list`, `get`, `create`, `delete`, `validate`
+- **`dolibarr projects`** — `list`, `get <id-or-ref>`, `create`, `update`, `delete`, `tasks <project-id>` (fifth ref-lookup resource).
+- **`dolibarr tickets`** — `list`, `get [id-or-ref]` (plus `--track-id <track>` to look up by public track ID), `create`, `update`, `delete`, `reply <track-id>` (posts to `/tickets/messages`).
+
+### Phase 4b → v0.2.3 — `contracts` + `shipments` + `receptions`
+
+- **`dolibarr contracts`** — `list`, `get`, `create`, `update`, `delete`, `validate`, `close`, `list-lines`, `activate-line`, `deactivate-line`.
+- **`dolibarr shipments`** — `list`, `get`, `create`, `delete`, `validate`, `close`.
+- **`dolibarr receptions`** — `list`, `get`, `create`, `delete`, `validate`, `close`.
 
 ---
 

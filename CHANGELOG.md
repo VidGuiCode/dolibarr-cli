@@ -1,5 +1,22 @@
 # Changelog
 
+## 0.2.2 — 2026-04-17
+
+### Added
+
+- **`dolibarr projects` command group** — `list`, `get <id-or-ref>`, `create`, `update`, `delete`, `tasks <project-id>`. Projects is the fifth resource group with ref-based lookup support (see 0.2.0). `tasks` calls `GET /projects/{id}/tasks` and accepts `--with-timespent` to include per-task time entries. `list` accepts `--thirdparty <id>` and `--status <n>` (0=draft, 1=validated, 2=closed). `create` requires `--ref` and `--title`; dates accept `YYYY-MM-DD` and are stored as Unix epoch seconds.
+- **`dolibarr tickets` command group** — `list`, `get [id-or-ref]`, `create`, `update`, `delete`, `reply <track-id>`. Tickets is the sixth resource group with ref-based lookup. `get` additionally accepts `--track-id <track>` to look up by the public track ID (routes to `GET /tickets/track_id/{track}`). `reply` posts to `POST /tickets/messages` with the required `--message <text>`. `create` requires `--subject` and `--message` and accepts `--category`, `--severity`, `--type`, and `--project` (fk_project).
+
+### Tests
+
+16 new structural tests (116 → 132) covering the command tree shape for both new groups: subcommand registration, positional arguments (including the optional id-or-ref on `tickets get`), required option semantics on `tickets reply --message`, and the filter/flag surface on `list` / `create` / `update` / `delete` / `tasks`.
+
+### Docs
+
+- `README.md` — added `projects` and `tickets` to the Commands table with one usage example per group.
+- `docs/ROADMAP.md` — marked Phase 4a as shipped.
+- Heads-up: the `tickets` module is **not enabled** on the source Dolibarr instance used to generate the reference docs; endpoints for `tickets` in this release were sourced from the public Dolibarr API reference rather than a live swagger dump. Please open a GitHub issue if you hit drift against a module-enabled instance.
+
 ## 0.2.1 — 2026-04-17
 
 ### Fixed
