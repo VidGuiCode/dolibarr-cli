@@ -3,8 +3,12 @@ import { Command } from "commander";
 import { createClient } from "../core/config-store.js";
 import { printInfo, printJson, printTable } from "../core/output.js";
 import { exitWithError } from "../core/errors.js";
-import { isDryRunEnabled } from "../core/runtime.js";
-import { ask } from "../core/prompt.js";
+import {
+  addListOptions,
+  buildListQuery,
+  confirmOrCancel,
+  dryRunJson,
+} from "../core/resource-helpers.js";
 
 const TYPE_MAP: Record<string, string> = {
   "0": "Products",
@@ -23,27 +27,19 @@ const TYPE_MAP: Record<string, string> = {
 export function createCategoriesCommand(): Command {
   const cmd = new Command("categories").description("Manage categories");
 
-  cmd
-    .command("list")
-    .description("List categories")
-    .option("--json", "Output as JSON")
-    .option("--limit <n>", "Results per page", "50")
-    .option("--page <n>", "Page number (0-indexed)", "0")
-    .option("--sort <field>", "Sort field")
-    .option("--order <dir>", "Sort order (ASC|DESC)")
-    .option("--filter <expr>", "SQL filter expression")
+  addListOptions(
+    cmd
+      .command("list")
+      .description("List categories"),
+  )
     .option("--type <n>", "Filter by type (0=products, 1=suppliers, 2=customers, etc.)")
     .action(async (opts) => {
       try {
         const client = createClient();
-        const items = await client.get<Record<string, unknown>[]>("categories", {
-          limit: opts.limit,
-          page: opts.page,
-          sortfield: opts.sort ? `t.${opts.sort}` : undefined,
-          sortorder: opts.order,
-          sqlfilters: opts.filter,
-          type: opts.type,
-        });
+        const items = await client.get<Record<string, unknown>[]>(
+          "categories",
+          buildListQuery(opts, { type: opts.type }),
+        );
         if (opts.json) { printJson(items); return; }
         const rows = items.map((i) => [
           String(i.id ?? ""),
@@ -102,7 +98,7 @@ export function createCategoriesCommand(): Command {
           if (opts.color) body.color = opts.color;
           if (opts.parent) body.fk_parent = Number(opts.parent);
         }
-        if (isDryRunEnabled()) { printJson({ dryRun: true, action: "categories.create", body }); return; }
+        if (dryRunJson("categories.create", { body })) return;
         const result = await client.post<number>("categories", body);
         if (opts.json) { printJson(result); return; }
         printInfo(`Created category with ID: ${result}`);
@@ -124,7 +120,7 @@ export function createCategoriesCommand(): Command {
         if (opts.label) body.label = opts.label;
         if (opts.description) body.description = opts.description;
         if (opts.color) body.color = opts.color;
-        if (isDryRunEnabled()) { printJson({ dryRun: true, action: "categories.update", id, body }); return; }
+        if (dryRunJson("categories.update", { id, body })) return;
         const result = await client.put<unknown>(`categories/${id}`, body);
         if (opts.json) { printJson(result); return; }
         printInfo(`Updated category ${id}`);
@@ -139,11 +135,8 @@ export function createCategoriesCommand(): Command {
     .option("--json", "Output as JSON")
     .action(async (id, opts) => {
       try {
-        if (!opts.confirm) {
-          const answer = await ask(`Delete category ${id}? (yes/no)`);
-          if (answer !== "yes") { printInfo("Cancelled."); return; }
-        }
-        if (isDryRunEnabled()) { printJson({ dryRun: true, action: "categories.delete", id }); return; }
+        if (!(await confirmOrCancel(`Delete category ${id}?`, opts))) return;
+        if (dryRunJson("categories.delete", { id })) return;
         const client = createClient();
         await client.delete(`categories/${id}`);
         if (opts.json) { printJson({ deleted: id }); return; }

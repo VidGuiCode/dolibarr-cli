@@ -60,32 +60,52 @@ Planned improvements and features for upcoming releases. This is a living docume
 
 ---
 
-## v0.2.0 — Extended Resources & Deep Endpoint Coverage
+## v0.1.2 — Internal refactor (2026-04-16)
 
-### New command groups
+Shipped refactor with no user-visible CLI surface changes, to make subsequent phases cheaper to add.
+
+- **`src/core/resource-helpers.ts`** — extracted shared command boilerplate: `addListOptions`, `buildListQuery`, `dryRunJson`, `prunePayload`, `confirmOrCancel`. 11 command files migrated to use the helpers.
+- **Tests** — 16 new unit tests for the helpers (total: 39).
+
+---
+
+## v0.2 — Phased program (in progress)
+
+Originally scoped as a single "Extended Resources & Deep Endpoint Coverage" release covering 5 new resource groups + 3 cross-cutting features + 60+ enhanced endpoints. Too big for one pass, so split into focused, independently-shippable phases.
+
+### Phase 3 → v0.2.0 — Cross-cutting features
+
+The first **minor** bump of the v0.2 program. User-facing behavior:
+
+- **Ref-based lookup** — `dolibarr invoices get FA2501-0001` resolves the ref to an ID transparently against `GET /{resource}/ref/{ref}` (available on invoices, orders, proposals, projects, categories per Dolibarr swagger).
+- **`--output table|json|csv`** — first-class CSV output on all `list` / `get` commands, with RFC 4180 escaping. `--json` remains as a shortcut for `--output json`.
+- **`--fields a,b,c`** — project a subset of columns in table/CSV output.
+
+### Phase 4a → v0.2.1 — `projects` + `tickets`
 
 - **`dolibarr projects`** — `list`, `get`, `create`, `update`, `delete`, `tasks`
 - **`dolibarr tickets`** — `list`, `get`, `create`, `update`, `delete`
+
+### Phase 4b → v0.2.2 — `contracts` + `shipments` + `receptions`
+
 - **`dolibarr contracts`** — `list`, `get`, `create`, `update`, `delete`, `activate-line`, `deactivate-line`
 - **`dolibarr shipments`** — `list`, `get`, `create`, `delete`, `validate`
 - **`dolibarr receptions`** — `list`, `get`, `create`, `delete`, `validate`
 
-### Enhanced existing commands
+---
 
-- **`thirdparties`** — categories, representatives, bank accounts, outstanding invoices, notifications, merge (remaining 27 endpoints)
-- **`invoices`** — contacts, discounts, create-from-order, credit notes (remaining endpoints)
-- **`orders`** — create-from-proposal, create-shipment (remaining endpoints)
-- **`products`** — attributes, attribute values, variants, purchase prices, multiprices, subproducts (remaining 30+ endpoints)
+## v0.3.0 — Deep endpoint coverage on existing resources
 
-### Features
+Fills in the endpoints currently missing on resources we already ship. Largest surface expansion of the overall program, so it gets its own minor bump.
 
-- **Ref-based lookup** — `dolibarr invoices get FA2501-0001` resolves ref to ID transparently
-- **`--fields` flag** — select which columns to display in table output
-- **CSV export** — full `--output csv` support with proper escaping
+- **`thirdparties`** — categories, representatives, bank accounts, outstanding invoices, notifications (remaining 27 endpoints)
+- **`invoices`** — contacts, discounts, create-from-order, credit notes
+- **`orders`** — create-from-proposal, create-shipment
+- **`products`** — attributes, attribute values, variants, purchase prices, multiprices, subproducts (30+ endpoints)
 
 ---
 
-## v0.3.0 — Automation & Bulk Operations
+## v0.4.0+ — Automation, bulk, and new resource groups
 
 ### New command groups
 
@@ -108,7 +128,7 @@ Planned improvements and features for upcoming releases. This is a living docume
 
 ---
 
-## v0.4.0 — Polish & Advanced Features
+## v0.5.0+ — Polish & Advanced Features
 
 ### Output & UX
 

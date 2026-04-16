@@ -3,8 +3,12 @@ import { Command } from "commander";
 import { createClient } from "../core/config-store.js";
 import { printInfo, printJson, printTable } from "../core/output.js";
 import { exitWithError } from "../core/errors.js";
-import { isDryRunEnabled } from "../core/runtime.js";
-import { ask } from "../core/prompt.js";
+import {
+  addListOptions,
+  buildListQuery,
+  confirmOrCancel,
+  dryRunJson,
+} from "../core/resource-helpers.js";
 
 const STATUS_MAP: Record<string, string> = {
   "0": "Draft",
@@ -16,29 +20,23 @@ const STATUS_MAP: Record<string, string> = {
 export function createSupplierInvoicesCommand(): Command {
   const cmd = new Command("supplier-invoices").description("Manage supplier invoices");
 
-  cmd
-    .command("list")
-    .description("List supplier invoices")
-    .option("--json", "Output as JSON")
-    .option("--limit <n>", "Results per page", "50")
-    .option("--page <n>", "Page number (0-indexed)", "0")
-    .option("--sort <field>", "Sort field")
-    .option("--order <dir>", "Sort order (ASC|DESC)")
-    .option("--filter <expr>", "SQL filter expression")
+  addListOptions(
+    cmd
+      .command("list")
+      .description("List supplier invoices"),
+  )
     .option("--status <n>", "Filter by status")
     .option("--thirdparty <id>", "Filter by supplier ID")
     .action(async (opts) => {
       try {
         const client = createClient();
-        const items = await client.get<Record<string, unknown>[]>("supplierinvoices", {
-          limit: opts.limit,
-          page: opts.page,
-          sortfield: opts.sort ? `t.${opts.sort}` : undefined,
-          sortorder: opts.order,
-          sqlfilters: opts.filter,
-          status: opts.status,
-          thirdparty_ids: opts.thirdparty,
-        });
+        const items = await client.get<Record<string, unknown>[]>(
+          "supplierinvoices",
+          buildListQuery(opts, {
+            status: opts.status,
+            thirdparty_ids: opts.thirdparty,
+          }),
+        );
         if (opts.json) { printJson(items); return; }
         const rows = items.map((i) => [
           String(i.id ?? ""),
@@ -105,10 +103,7 @@ export function createSupplierInvoicesCommand(): Command {
           if (opts.notePrivate) body.note_private = opts.notePrivate;
         }
 
-        if (isDryRunEnabled()) {
-          printJson({ dryRun: true, action: "supplier-invoices.create", body });
-          return;
-        }
+        if (dryRunJson("supplier-invoices.create", { body })) return;
         const result = await client.post<number>("supplierinvoices", body);
         if (opts.json) { printJson(result); return; }
         printInfo(`Created supplier invoice with ID: ${result}`);
@@ -131,10 +126,7 @@ export function createSupplierInvoicesCommand(): Command {
         if (opts.notePrivate) body.note_private = opts.notePrivate;
         if (opts.refSupplier) body.ref_supplier = opts.refSupplier;
 
-        if (isDryRunEnabled()) {
-          printJson({ dryRun: true, action: "supplier-invoices.update", id, body });
-          return;
-        }
+        if (dryRunJson("supplier-invoices.update", { id, body })) return;
         const result = await client.put<unknown>(`supplierinvoices/${id}`, body);
         if (opts.json) { printJson(result); return; }
         printInfo(`Updated supplier invoice ${id}`);
@@ -149,14 +141,8 @@ export function createSupplierInvoicesCommand(): Command {
     .option("--json", "Output as JSON")
     .action(async (id, opts) => {
       try {
-        if (!opts.confirm) {
-          const answer = await ask(`Delete supplier invoice ${id}? (yes/no)`);
-          if (answer !== "yes") { printInfo("Cancelled."); return; }
-        }
-        if (isDryRunEnabled()) {
-          printJson({ dryRun: true, action: "supplier-invoices.delete", id });
-          return;
-        }
+        if (!(await confirmOrCancel(`Delete supplier invoice ${id}?`, opts))) return;
+        if (dryRunJson("supplier-invoices.delete", { id })) return;
         const client = createClient();
         await client.delete(`supplierinvoices/${id}`);
         if (opts.json) { printJson({ deleted: id }); return; }
@@ -171,10 +157,7 @@ export function createSupplierInvoicesCommand(): Command {
     .option("--json", "Output as JSON")
     .action(async (id, opts) => {
       try {
-        if (isDryRunEnabled()) {
-          printJson({ dryRun: true, action: "supplier-invoices.validate", id });
-          return;
-        }
+        if (dryRunJson("supplier-invoices.validate", { id })) return;
         const client = createClient();
         const result = await client.post<unknown>(`supplierinvoices/${id}/validate`);
         if (opts.json) { printJson(result); return; }
@@ -200,10 +183,7 @@ export function createSupplierInvoicesCommand(): Command {
         if (opts.amount) body.amount = Number(opts.amount);
         if (opts.bankAccount) body.accountid = Number(opts.bankAccount);
 
-        if (isDryRunEnabled()) {
-          printJson({ dryRun: true, action: "supplier-invoices.pay", id, body });
-          return;
-        }
+        if (dryRunJson("supplier-invoices.pay", { id, body })) return;
         const client = createClient();
         const result = await client.post<unknown>(`supplierinvoices/${id}/payments`, body);
         if (opts.json) { printJson(result); return; }

@@ -1,5 +1,20 @@
 # Changelog
 
+## 0.1.2 — 2026-04-16
+
+### Changed
+
+- **Internal refactor**: extracted shared command boilerplate into `src/core/resource-helpers.ts`. The list-option wiring, dry-run envelope, pagination query shape, undefined-key pruning, and delete-confirmation prompt are now single helpers (`addListOptions`, `buildListQuery`, `dryRunJson`, `prunePayload`, `confirmOrCancel`) reused across 11 command files. No user-visible CLI behavior changes.
+- Removed unused `CHANGELOG` line from 0.1.0 that referenced gitignored documentation. See README and `docs/ROADMAP.md` for current reference material.
+
+### Added
+
+- 16 new unit tests covering `resource-helpers.ts` (option wiring, query building, dry-run envelope shape, payload pruning, confirm semantics). Test total: 23 → 39.
+
+### Docs
+
+- `docs/ROADMAP.md` — v0.2 is now documented as a **phased** program (Phase 2 refactor → Phase 3 cross-cutting features → Phase 4a/4b new resource groups → Phase 5 deep endpoint coverage) rather than a single monolithic release.
+
 ## 0.1.1 — 2026-04-16
 
 ### Fixed
@@ -60,6 +75,5 @@
 - Output tests: table formatting, JSON output, info/error printing
 
 #### Documentation
-- 24 per-resource API reference files in `context/docs/reference/`
 - Version roadmap (`docs/ROADMAP.md`)
 - CLAUDE.md with full agent briefing

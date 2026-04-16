@@ -3,8 +3,12 @@ import { Command } from "commander";
 import { createClient } from "../core/config-store.js";
 import { printInfo, printJson, printTable } from "../core/output.js";
 import { exitWithError } from "../core/errors.js";
-import { isDryRunEnabled } from "../core/runtime.js";
-import { ask } from "../core/prompt.js";
+import {
+  addListOptions,
+  buildListQuery,
+  confirmOrCancel,
+  dryRunJson,
+} from "../core/resource-helpers.js";
 
 const STATUS_MAP: Record<string, string> = {
   "-1": "Canceled",
@@ -17,29 +21,23 @@ const STATUS_MAP: Record<string, string> = {
 export function createOrdersCommand(): Command {
   const cmd = new Command("orders").description("Manage customer orders");
 
-  cmd
-    .command("list")
-    .description("List customer orders")
-    .option("--json", "Output as JSON")
-    .option("--limit <n>", "Results per page", "50")
-    .option("--page <n>", "Page number (0-indexed)", "0")
-    .option("--sort <field>", "Sort field")
-    .option("--order <dir>", "Sort order (ASC|DESC)")
-    .option("--filter <expr>", "SQL filter expression")
+  addListOptions(
+    cmd
+      .command("list")
+      .description("List customer orders"),
+  )
     .option("--status <n>", "Filter by status")
     .option("--thirdparty <id>", "Filter by thirdparty ID")
     .action(async (opts) => {
       try {
         const client = createClient();
-        const items = await client.get<Record<string, unknown>[]>("orders", {
-          limit: opts.limit,
-          page: opts.page,
-          sortfield: opts.sort ? `t.${opts.sort}` : undefined,
-          sortorder: opts.order,
-          sqlfilters: opts.filter,
-          status: opts.status,
-          thirdparty_ids: opts.thirdparty,
-        });
+        const items = await client.get<Record<string, unknown>[]>(
+          "orders",
+          buildListQuery(opts, {
+            status: opts.status,
+            thirdparty_ids: opts.thirdparty,
+          }),
+        );
         if (opts.json) { printJson(items); return; }
         const rows = items.map((i) => [
           String(i.id ?? ""),
@@ -97,7 +95,7 @@ export function createOrdersCommand(): Command {
           if (opts.notePublic) body.note_public = opts.notePublic;
           if (opts.notePrivate) body.note_private = opts.notePrivate;
         }
-        if (isDryRunEnabled()) { printJson({ dryRun: true, action: "orders.create", body }); return; }
+        if (dryRunJson("orders.create", { body })) return;
         const result = await client.post<number>("orders", body);
         if (opts.json) { printJson(result); return; }
         printInfo(`Created order with ID: ${result}`);
@@ -117,7 +115,7 @@ export function createOrdersCommand(): Command {
         const body: Record<string, unknown> = {};
         if (opts.notePublic) body.note_public = opts.notePublic;
         if (opts.notePrivate) body.note_private = opts.notePrivate;
-        if (isDryRunEnabled()) { printJson({ dryRun: true, action: "orders.update", id, body }); return; }
+        if (dryRunJson("orders.update", { id, body })) return;
         const result = await client.put<unknown>(`orders/${id}`, body);
         if (opts.json) { printJson(result); return; }
         printInfo(`Updated order ${id}`);
@@ -132,11 +130,8 @@ export function createOrdersCommand(): Command {
     .option("--json", "Output as JSON")
     .action(async (id, opts) => {
       try {
-        if (!opts.confirm) {
-          const answer = await ask(`Delete order ${id}? (yes/no)`);
-          if (answer !== "yes") { printInfo("Cancelled."); return; }
-        }
-        if (isDryRunEnabled()) { printJson({ dryRun: true, action: "orders.delete", id }); return; }
+        if (!(await confirmOrCancel(`Delete order ${id}?`, opts))) return;
+        if (dryRunJson("orders.delete", { id })) return;
         const client = createClient();
         await client.delete(`orders/${id}`);
         if (opts.json) { printJson({ deleted: id }); return; }
@@ -152,7 +147,7 @@ export function createOrdersCommand(): Command {
     .option("--warehouse <id>", "Warehouse ID for stock movement")
     .action(async (id, opts) => {
       try {
-        if (isDryRunEnabled()) { printJson({ dryRun: true, action: "orders.validate", id }); return; }
+        if (dryRunJson("orders.validate", { id })) return;
         const client = createClient();
         const body: Record<string, unknown> = {};
         if (opts.warehouse) body.idwarehouse = Number(opts.warehouse);
@@ -169,7 +164,7 @@ export function createOrdersCommand(): Command {
     .option("--json", "Output as JSON")
     .action(async (id, opts) => {
       try {
-        if (isDryRunEnabled()) { printJson({ dryRun: true, action: "orders.close", id }); return; }
+        if (dryRunJson("orders.close", { id })) return;
         const client = createClient();
         const result = await client.post<unknown>(`orders/${id}/close`);
         if (opts.json) { printJson(result); return; }
@@ -196,7 +191,7 @@ export function createOrdersCommand(): Command {
           tva_tx: Number(opts.tvaTx),
         };
         if (opts.productId) body.fk_product = Number(opts.productId);
-        if (isDryRunEnabled()) { printJson({ dryRun: true, action: "orders.addLine", id, body }); return; }
+        if (dryRunJson("orders.addLine", { id, body })) return;
         const client = createClient();
         const result = await client.post<unknown>(`orders/${id}/lines`, body);
         if (opts.json) { printJson(result); return; }

@@ -4,8 +4,7 @@ import { Command } from "commander";
 import { createClient } from "../core/config-store.js";
 import { printInfo, printJson, printTable } from "../core/output.js";
 import { exitWithError } from "../core/errors.js";
-import { isDryRunEnabled } from "../core/runtime.js";
-import { ask } from "../core/prompt.js";
+import { confirmOrCancel, dryRunJson } from "../core/resource-helpers.js";
 
 export function createDocumentsCommand(): Command {
   const cmd = new Command("documents").description("Manage documents and files");
@@ -89,10 +88,7 @@ export function createDocumentsCommand(): Command {
           createdirifnotexists: 1,
         };
 
-        if (isDryRunEnabled()) {
-          printJson({ dryRun: true, action: "documents.upload", filename, module: opts.module, ref: opts.ref });
-          return;
-        }
+        if (dryRunJson("documents.upload", { filename, module: opts.module, ref: opts.ref })) return;
 
         const client = createClient();
         const result = await client.post<unknown>("documents/upload", body);
@@ -110,14 +106,8 @@ export function createDocumentsCommand(): Command {
     .option("--json", "Output as JSON")
     .action(async (opts) => {
       try {
-        if (!opts.confirm) {
-          const answer = await ask(`Delete document ${opts.file}? (yes/no)`);
-          if (answer !== "yes") { printInfo("Cancelled."); return; }
-        }
-        if (isDryRunEnabled()) {
-          printJson({ dryRun: true, action: "documents.delete", module: opts.module, file: opts.file });
-          return;
-        }
+        if (!(await confirmOrCancel(`Delete document ${opts.file}?`, opts))) return;
+        if (dryRunJson("documents.delete", { module: opts.module, file: opts.file })) return;
         const client = createClient();
         await client.delete(`documents?modulepart=${encodeURIComponent(opts.module)}&original_file=${encodeURIComponent(opts.file)}`);
         if (opts.json) { printJson({ deleted: opts.file }); return; }

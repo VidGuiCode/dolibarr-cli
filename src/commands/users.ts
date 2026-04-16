@@ -3,30 +3,27 @@ import { Command } from "commander";
 import { createClient } from "../core/config-store.js";
 import { printInfo, printJson, printTable } from "../core/output.js";
 import { exitWithError } from "../core/errors.js";
-import { isDryRunEnabled } from "../core/runtime.js";
+import {
+  addListOptions,
+  buildListQuery,
+  dryRunJson,
+} from "../core/resource-helpers.js";
 
 export function createUsersCommand(): Command {
   const cmd = new Command("users").description("Manage users");
 
-  cmd
-    .command("list")
-    .description("List users")
-    .option("--json", "Output as JSON")
-    .option("--limit <n>", "Results per page", "50")
-    .option("--page <n>", "Page number (0-indexed)", "0")
-    .option("--sort <field>", "Sort field")
-    .option("--order <dir>", "Sort order (ASC|DESC)")
-    .option("--filter <expr>", "SQL filter expression")
+  addListOptions(
+    cmd
+      .command("list")
+      .description("List users"),
+  )
     .action(async (opts) => {
       try {
         const client = createClient();
-        const items = await client.get<Record<string, unknown>[]>("users", {
-          limit: opts.limit,
-          page: opts.page,
-          sortfield: opts.sort ? `t.${opts.sort}` : undefined,
-          sortorder: opts.order,
-          sqlfilters: opts.filter,
-        });
+        const items = await client.get<Record<string, unknown>[]>(
+          "users",
+          buildListQuery(opts),
+        );
         if (opts.json) { printJson(items); return; }
         const rows = items.map((i) => [
           String(i.id ?? ""),
@@ -111,7 +108,7 @@ export function createUsersCommand(): Command {
           if (opts.email) body.email = opts.email;
           if (opts.password) body.password = opts.password;
         }
-        if (isDryRunEnabled()) { printJson({ dryRun: true, action: "users.create", body: { ...body, password: body.password ? "****" : undefined } }); return; }
+        if (dryRunJson("users.create", { body: { ...body, password: body.password ? "****" : undefined } })) return;
         const result = await client.post<number>("users", body);
         if (opts.json) { printJson(result); return; }
         printInfo(`Created user with ID: ${result}`);
@@ -133,7 +130,7 @@ export function createUsersCommand(): Command {
         if (opts.lastname) body.lastname = opts.lastname;
         if (opts.firstname) body.firstname = opts.firstname;
         if (opts.email) body.email = opts.email;
-        if (isDryRunEnabled()) { printJson({ dryRun: true, action: "users.update", id, body }); return; }
+        if (dryRunJson("users.update", { id, body })) return;
         const result = await client.put<unknown>(`users/${id}`, body);
         if (opts.json) { printJson(result); return; }
         printInfo(`Updated user ${id}`);

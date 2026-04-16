@@ -3,8 +3,12 @@ import { Command } from "commander";
 import { createClient } from "../core/config-store.js";
 import { printInfo, printJson, printTable } from "../core/output.js";
 import { exitWithError } from "../core/errors.js";
-import { isDryRunEnabled } from "../core/runtime.js";
-import { ask } from "../core/prompt.js";
+import {
+  addListOptions,
+  buildListQuery,
+  confirmOrCancel,
+  dryRunJson,
+} from "../core/resource-helpers.js";
 
 const STATUS_MAP: Record<string, string> = {
   "0": "Draft",
@@ -17,29 +21,23 @@ const STATUS_MAP: Record<string, string> = {
 export function createProposalsCommand(): Command {
   const cmd = new Command("proposals").description("Manage proposals (quotes)");
 
-  cmd
-    .command("list")
-    .description("List proposals")
-    .option("--json", "Output as JSON")
-    .option("--limit <n>", "Results per page", "50")
-    .option("--page <n>", "Page number (0-indexed)", "0")
-    .option("--sort <field>", "Sort field")
-    .option("--order <dir>", "Sort order (ASC|DESC)")
-    .option("--filter <expr>", "SQL filter expression")
+  addListOptions(
+    cmd
+      .command("list")
+      .description("List proposals"),
+  )
     .option("--status <n>", "Filter by status")
     .option("--thirdparty <id>", "Filter by thirdparty ID")
     .action(async (opts) => {
       try {
         const client = createClient();
-        const items = await client.get<Record<string, unknown>[]>("proposals", {
-          limit: opts.limit,
-          page: opts.page,
-          sortfield: opts.sort ? `t.${opts.sort}` : undefined,
-          sortorder: opts.order,
-          sqlfilters: opts.filter,
-          status: opts.status,
-          thirdparty_ids: opts.thirdparty,
-        });
+        const items = await client.get<Record<string, unknown>[]>(
+          "proposals",
+          buildListQuery(opts, {
+            status: opts.status,
+            thirdparty_ids: opts.thirdparty,
+          }),
+        );
         if (opts.json) { printJson(items); return; }
         const rows = items.map((i) => [
           String(i.id ?? ""),
@@ -98,7 +96,7 @@ export function createProposalsCommand(): Command {
           if (opts.notePublic) body.note_public = opts.notePublic;
           if (opts.notePrivate) body.note_private = opts.notePrivate;
         }
-        if (isDryRunEnabled()) { printJson({ dryRun: true, action: "proposals.create", body }); return; }
+        if (dryRunJson("proposals.create", { body })) return;
         const result = await client.post<number>("proposals", body);
         if (opts.json) { printJson(result); return; }
         printInfo(`Created proposal with ID: ${result}`);
@@ -118,7 +116,7 @@ export function createProposalsCommand(): Command {
         const body: Record<string, unknown> = {};
         if (opts.notePublic) body.note_public = opts.notePublic;
         if (opts.notePrivate) body.note_private = opts.notePrivate;
-        if (isDryRunEnabled()) { printJson({ dryRun: true, action: "proposals.update", id, body }); return; }
+        if (dryRunJson("proposals.update", { id, body })) return;
         const result = await client.put<unknown>(`proposals/${id}`, body);
         if (opts.json) { printJson(result); return; }
         printInfo(`Updated proposal ${id}`);
@@ -133,11 +131,8 @@ export function createProposalsCommand(): Command {
     .option("--json", "Output as JSON")
     .action(async (id, opts) => {
       try {
-        if (!opts.confirm) {
-          const answer = await ask(`Delete proposal ${id}? (yes/no)`);
-          if (answer !== "yes") { printInfo("Cancelled."); return; }
-        }
-        if (isDryRunEnabled()) { printJson({ dryRun: true, action: "proposals.delete", id }); return; }
+        if (!(await confirmOrCancel(`Delete proposal ${id}?`, opts))) return;
+        if (dryRunJson("proposals.delete", { id })) return;
         const client = createClient();
         await client.delete(`proposals/${id}`);
         if (opts.json) { printJson({ deleted: id }); return; }
@@ -152,7 +147,7 @@ export function createProposalsCommand(): Command {
     .option("--json", "Output as JSON")
     .action(async (id, opts) => {
       try {
-        if (isDryRunEnabled()) { printJson({ dryRun: true, action: "proposals.validate", id }); return; }
+        if (dryRunJson("proposals.validate", { id })) return;
         const client = createClient();
         const result = await client.post<unknown>(`proposals/${id}/validate`);
         if (opts.json) { printJson(result); return; }
@@ -173,7 +168,7 @@ export function createProposalsCommand(): Command {
           status: Number(opts.status),
         };
         if (opts.note) body.note_private = opts.note;
-        if (isDryRunEnabled()) { printJson({ dryRun: true, action: "proposals.close", id, body }); return; }
+        if (dryRunJson("proposals.close", { id, body })) return;
         const client = createClient();
         const result = await client.post<unknown>(`proposals/${id}/close`, body);
         if (opts.json) { printJson(result); return; }
@@ -200,7 +195,7 @@ export function createProposalsCommand(): Command {
           tva_tx: Number(opts.tvaTx),
         };
         if (opts.productId) body.fk_product = Number(opts.productId);
-        if (isDryRunEnabled()) { printJson({ dryRun: true, action: "proposals.addLine", id, body }); return; }
+        if (dryRunJson("proposals.addLine", { id, body })) return;
         const client = createClient();
         const result = await client.post<unknown>(`proposals/${id}/lines`, body);
         if (opts.json) { printJson(result); return; }

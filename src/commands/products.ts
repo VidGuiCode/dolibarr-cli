@@ -3,21 +3,21 @@ import { Command } from "commander";
 import { createClient } from "../core/config-store.js";
 import { printInfo, printJson, printTable } from "../core/output.js";
 import { exitWithError } from "../core/errors.js";
-import { isDryRunEnabled } from "../core/runtime.js";
-import { ask } from "../core/prompt.js";
+import {
+  addListOptions,
+  buildListQuery,
+  confirmOrCancel,
+  dryRunJson,
+} from "../core/resource-helpers.js";
 
 export function createProductsCommand(): Command {
   const cmd = new Command("products").description("Manage products and services");
 
-  cmd
-    .command("list")
-    .description("List products and services")
-    .option("--json", "Output as JSON")
-    .option("--limit <n>", "Results per page", "50")
-    .option("--page <n>", "Page number (0-indexed)", "0")
-    .option("--sort <field>", "Sort field")
-    .option("--order <dir>", "Sort order (ASC|DESC)")
-    .option("--filter <expr>", "SQL filter expression")
+  addListOptions(
+    cmd
+      .command("list")
+      .description("List products and services"),
+  )
     .option("--type <type>", "Filter by type (product or service)")
     .option("--category <id>", "Filter by category ID")
     .option("--include-stock", "Include stock data")
@@ -28,16 +28,14 @@ export function createProductsCommand(): Command {
         if (opts.type === "product") mode = "1";
         else if (opts.type === "service") mode = "2";
 
-        const items = await client.get<Record<string, unknown>[]>("products", {
-          limit: opts.limit,
-          page: opts.page,
-          sortfield: opts.sort ? `t.${opts.sort}` : undefined,
-          sortorder: opts.order,
-          sqlfilters: opts.filter,
-          mode,
-          category: opts.category,
-          includestockdata: opts.includeStock ? 1 : undefined,
-        });
+        const items = await client.get<Record<string, unknown>[]>(
+          "products",
+          buildListQuery(opts, {
+            mode,
+            category: opts.category,
+            includestockdata: opts.includeStock ? 1 : undefined,
+          }),
+        );
         if (opts.json) { printJson(items); return; }
         const rows = items.map((i) => [
           String(i.id ?? ""),
@@ -116,7 +114,7 @@ export function createProductsCommand(): Command {
           if (opts.description) body.description = opts.description;
           if (opts.barcode) body.barcode = opts.barcode;
         }
-        if (isDryRunEnabled()) { printJson({ dryRun: true, action: "products.create", body }); return; }
+        if (dryRunJson("products.create", { body })) return;
         const result = await client.post<number>("products", body);
         if (opts.json) { printJson(result); return; }
         printInfo(`Created product with ID: ${result}`);
@@ -142,7 +140,7 @@ export function createProductsCommand(): Command {
         if (opts.description) body.description = opts.description;
         if (opts.status) body.status = Number(opts.status);
         if (opts.statusBuy) body.status_buy = Number(opts.statusBuy);
-        if (isDryRunEnabled()) { printJson({ dryRun: true, action: "products.update", id, body }); return; }
+        if (dryRunJson("products.update", { id, body })) return;
         const result = await client.put<unknown>(`products/${id}`, body);
         if (opts.json) { printJson(result); return; }
         printInfo(`Updated product ${id}`);
@@ -157,11 +155,8 @@ export function createProductsCommand(): Command {
     .option("--json", "Output as JSON")
     .action(async (id, opts) => {
       try {
-        if (!opts.confirm) {
-          const answer = await ask(`Delete product ${id}? (yes/no)`);
-          if (answer !== "yes") { printInfo("Cancelled."); return; }
-        }
-        if (isDryRunEnabled()) { printJson({ dryRun: true, action: "products.delete", id }); return; }
+        if (!(await confirmOrCancel(`Delete product ${id}?`, opts))) return;
+        if (dryRunJson("products.delete", { id })) return;
         const client = createClient();
         await client.delete(`products/${id}`);
         if (opts.json) { printJson({ deleted: id }); return; }

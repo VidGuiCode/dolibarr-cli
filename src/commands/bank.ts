@@ -2,30 +2,27 @@ import { Command } from "commander";
 import { createClient } from "../core/config-store.js";
 import { printInfo, printJson, printTable } from "../core/output.js";
 import { exitWithError } from "../core/errors.js";
-import { isDryRunEnabled } from "../core/runtime.js";
+import {
+  addListOptions,
+  buildListQuery,
+  dryRunJson,
+} from "../core/resource-helpers.js";
 
 export function createBankCommand(): Command {
   const cmd = new Command("bank").description("Manage bank accounts and transactions");
 
-  cmd
-    .command("list")
-    .description("List bank accounts")
-    .option("--json", "Output as JSON")
-    .option("--limit <n>", "Results per page", "50")
-    .option("--page <n>", "Page number (0-indexed)", "0")
-    .option("--sort <field>", "Sort field")
-    .option("--order <dir>", "Sort order (ASC|DESC)")
-    .option("--filter <expr>", "SQL filter expression")
+  addListOptions(
+    cmd
+      .command("list")
+      .description("List bank accounts"),
+  )
     .action(async (opts) => {
       try {
         const client = createClient();
-        const items = await client.get<Record<string, unknown>[]>("bankaccounts", {
-          limit: opts.limit,
-          page: opts.page,
-          sortfield: opts.sort ? `t.${opts.sort}` : undefined,
-          sortorder: opts.order,
-          sqlfilters: opts.filter,
-        });
+        const items = await client.get<Record<string, unknown>[]>(
+          "bankaccounts",
+          buildListQuery(opts),
+        );
         if (opts.json) { printJson(items); return; }
         const rows = items.map((i) => [
           String(i.id ?? ""),
@@ -78,7 +75,7 @@ export function createBankCommand(): Command {
         if (opts.iban) body.iban = opts.iban;
         if (opts.bic) body.bic = opts.bic;
         if (opts.currency) body.currency_code = opts.currency;
-        if (isDryRunEnabled()) { printJson({ dryRun: true, action: "bank.create", body }); return; }
+        if (dryRunJson("bank.create", { body })) return;
         const client = createClient();
         const result = await client.post<number>("bankaccounts", body);
         if (opts.json) { printJson(result); return; }
@@ -130,7 +127,7 @@ export function createBankCommand(): Command {
           date: opts.date,
           description: opts.description,
         };
-        if (isDryRunEnabled()) { printJson({ dryRun: true, action: "bank.transfer", body }); return; }
+        if (dryRunJson("bank.transfer", { body })) return;
         const client = createClient();
         const result = await client.post<unknown>("bankaccounts/transfer", body);
         if (opts.json) { printJson(result); return; }

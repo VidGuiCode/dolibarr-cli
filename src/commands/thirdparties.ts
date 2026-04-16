@@ -3,8 +3,13 @@ import { Command } from "commander";
 import { createClient } from "../core/config-store.js";
 import { printInfo, printJson, printTable } from "../core/output.js";
 import { exitWithError } from "../core/errors.js";
-import { isDryRunEnabled } from "../core/runtime.js";
-import { ask } from "../core/prompt.js";
+import {
+  addListOptions,
+  buildListQuery,
+  confirmOrCancel,
+  dryRunJson,
+  prunePayload,
+} from "../core/resource-helpers.js";
 
 function thirdpartyType(item: Record<string, unknown>): string {
   const parts: string[] = [];
@@ -19,15 +24,11 @@ export function createThirdpartiesCommand(): Command {
     "Manage thirdparties (customers, suppliers, prospects)",
   );
 
-  cmd
-    .command("list")
-    .description("List thirdparties")
-    .option("--json", "Output as JSON")
-    .option("--limit <n>", "Results per page", "50")
-    .option("--page <n>", "Page number (0-indexed)", "0")
-    .option("--sort <field>", "Sort field")
-    .option("--order <dir>", "Sort order (ASC|DESC)")
-    .option("--filter <expr>", "SQL filter expression")
+  addListOptions(
+    cmd
+      .command("list")
+      .description("List thirdparties"),
+  )
     .option("--customer", "Show customers only")
     .option("--prospect", "Show prospects only")
     .option("--supplier", "Show suppliers only")
@@ -40,15 +41,10 @@ export function createThirdpartiesCommand(): Command {
         else if (opts.prospect) mode = "2";
         else if (opts.supplier) mode = "4";
 
-        const items = await client.get<Record<string, unknown>[]>("thirdparties", {
-          limit: opts.limit,
-          page: opts.page,
-          sortfield: opts.sort ? `t.${opts.sort}` : undefined,
-          sortorder: opts.order,
-          sqlfilters: opts.filter,
-          mode,
-          category: opts.category,
-        });
+        const items = await client.get<Record<string, unknown>[]>(
+          "thirdparties",
+          buildListQuery(opts, { mode, category: opts.category }),
+        );
 
         if (opts.json) { printJson(items); return; }
 
@@ -117,7 +113,7 @@ export function createThirdpartiesCommand(): Command {
             printInfo("Error: --name is required");
             process.exit(1);
           }
-          body = {
+          body = prunePayload({
             name: opts.name,
             client: opts.client ? Number(opts.client) : undefined,
             fournisseur: opts.supplier ? 1 : undefined,
@@ -128,15 +124,10 @@ export function createThirdpartiesCommand(): Command {
             country_id: opts.countryId ? Number(opts.countryId) : undefined,
             code_client: opts.codeClient,
             code_fournisseur: opts.codeFournisseur,
-          };
-          // Remove undefined values
-          Object.keys(body).forEach((k) => body[k] === undefined && delete body[k]);
+          });
         }
 
-        if (isDryRunEnabled()) {
-          printJson({ dryRun: true, action: "thirdparties.create", body });
-          return;
-        }
+        if (dryRunJson("thirdparties.create", { body })) return;
 
         const result = await client.post<number>("thirdparties", body);
         if (opts.json) { printJson(result); return; }
@@ -168,10 +159,7 @@ export function createThirdpartiesCommand(): Command {
         if (opts.client) body.client = Number(opts.client);
         if (opts.supplier) body.fournisseur = 1;
 
-        if (isDryRunEnabled()) {
-          printJson({ dryRun: true, action: "thirdparties.update", id, body });
-          return;
-        }
+        if (dryRunJson("thirdparties.update", { id, body })) return;
 
         const result = await client.put<unknown>(`thirdparties/${id}`, body);
         if (opts.json) { printJson(result); return; }
@@ -187,15 +175,9 @@ export function createThirdpartiesCommand(): Command {
     .option("--json", "Output as JSON")
     .action(async (id, opts) => {
       try {
-        if (!opts.confirm) {
-          const answer = await ask(`Delete thirdparty ${id}? (yes/no)`);
-          if (answer !== "yes") { printInfo("Cancelled."); return; }
-        }
+        if (!(await confirmOrCancel(`Delete thirdparty ${id}?`, opts))) return;
 
-        if (isDryRunEnabled()) {
-          printJson({ dryRun: true, action: "thirdparties.delete", id });
-          return;
-        }
+        if (dryRunJson("thirdparties.delete", { id })) return;
 
         const client = createClient();
         await client.delete(`thirdparties/${id}`);
@@ -212,10 +194,7 @@ export function createThirdpartiesCommand(): Command {
     .option("--json", "Output as JSON")
     .action(async (id, idToDelete, opts) => {
       try {
-        if (isDryRunEnabled()) {
-          printJson({ dryRun: true, action: "thirdparties.merge", id, idToDelete });
-          return;
-        }
+        if (dryRunJson("thirdparties.merge", { id, idToDelete })) return;
 
         const client = createClient();
         const result = await client.put<unknown>(`thirdparties/${id}/merge/${idToDelete}`);

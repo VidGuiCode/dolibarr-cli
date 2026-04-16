@@ -3,8 +3,12 @@ import { Command } from "commander";
 import { createClient } from "../core/config-store.js";
 import { printInfo, printJson, printTable } from "../core/output.js";
 import { exitWithError } from "../core/errors.js";
-import { isDryRunEnabled } from "../core/runtime.js";
-import { ask } from "../core/prompt.js";
+import {
+  addListOptions,
+  buildListQuery,
+  confirmOrCancel,
+  dryRunJson,
+} from "../core/resource-helpers.js";
 
 const STATUS_MAP: Record<string, string> = {
   "0": "Draft",
@@ -20,29 +24,23 @@ const STATUS_MAP: Record<string, string> = {
 export function createSupplierOrdersCommand(): Command {
   const cmd = new Command("supplier-orders").description("Manage supplier orders");
 
-  cmd
-    .command("list")
-    .description("List supplier orders")
-    .option("--json", "Output as JSON")
-    .option("--limit <n>", "Results per page", "50")
-    .option("--page <n>", "Page number (0-indexed)", "0")
-    .option("--sort <field>", "Sort field")
-    .option("--order <dir>", "Sort order (ASC|DESC)")
-    .option("--filter <expr>", "SQL filter expression")
+  addListOptions(
+    cmd
+      .command("list")
+      .description("List supplier orders"),
+  )
     .option("--status <n>", "Filter by status")
     .option("--thirdparty <id>", "Filter by supplier ID")
     .action(async (opts) => {
       try {
         const client = createClient();
-        const items = await client.get<Record<string, unknown>[]>("supplier_orders", {
-          limit: opts.limit,
-          page: opts.page,
-          sortfield: opts.sort ? `t.${opts.sort}` : undefined,
-          sortorder: opts.order,
-          sqlfilters: opts.filter,
-          status: opts.status,
-          thirdparty_ids: opts.thirdparty,
-        });
+        const items = await client.get<Record<string, unknown>[]>(
+          "supplier_orders",
+          buildListQuery(opts, {
+            status: opts.status,
+            thirdparty_ids: opts.thirdparty,
+          }),
+        );
         if (opts.json) { printJson(items); return; }
         const rows = items.map((i) => [
           String(i.id ?? ""),
@@ -100,7 +98,7 @@ export function createSupplierOrdersCommand(): Command {
           if (opts.notePublic) body.note_public = opts.notePublic;
           if (opts.notePrivate) body.note_private = opts.notePrivate;
         }
-        if (isDryRunEnabled()) { printJson({ dryRun: true, action: "supplier-orders.create", body }); return; }
+        if (dryRunJson("supplier-orders.create", { body })) return;
         const result = await client.post<number>("supplier_orders", body);
         if (opts.json) { printJson(result); return; }
         printInfo(`Created supplier order with ID: ${result}`);
@@ -120,7 +118,7 @@ export function createSupplierOrdersCommand(): Command {
         const body: Record<string, unknown> = {};
         if (opts.notePublic) body.note_public = opts.notePublic;
         if (opts.notePrivate) body.note_private = opts.notePrivate;
-        if (isDryRunEnabled()) { printJson({ dryRun: true, action: "supplier-orders.update", id, body }); return; }
+        if (dryRunJson("supplier-orders.update", { id, body })) return;
         const result = await client.put<unknown>(`supplier_orders/${id}`, body);
         if (opts.json) { printJson(result); return; }
         printInfo(`Updated supplier order ${id}`);
@@ -135,11 +133,8 @@ export function createSupplierOrdersCommand(): Command {
     .option("--json", "Output as JSON")
     .action(async (id, opts) => {
       try {
-        if (!opts.confirm) {
-          const answer = await ask(`Delete supplier order ${id}? (yes/no)`);
-          if (answer !== "yes") { printInfo("Cancelled."); return; }
-        }
-        if (isDryRunEnabled()) { printJson({ dryRun: true, action: "supplier-orders.delete", id }); return; }
+        if (!(await confirmOrCancel(`Delete supplier order ${id}?`, opts))) return;
+        if (dryRunJson("supplier-orders.delete", { id })) return;
         const client = createClient();
         await client.delete(`supplier_orders/${id}`);
         if (opts.json) { printJson({ deleted: id }); return; }
@@ -154,7 +149,7 @@ export function createSupplierOrdersCommand(): Command {
     .option("--json", "Output as JSON")
     .action(async (id, opts) => {
       try {
-        if (isDryRunEnabled()) { printJson({ dryRun: true, action: "supplier-orders.validate", id }); return; }
+        if (dryRunJson("supplier-orders.validate", { id })) return;
         const client = createClient();
         const result = await client.post<unknown>(`supplier_orders/${id}/validate`);
         if (opts.json) { printJson(result); return; }
@@ -169,7 +164,7 @@ export function createSupplierOrdersCommand(): Command {
     .option("--json", "Output as JSON")
     .action(async (id, opts) => {
       try {
-        if (isDryRunEnabled()) { printJson({ dryRun: true, action: "supplier-orders.approve", id }); return; }
+        if (dryRunJson("supplier-orders.approve", { id })) return;
         const client = createClient();
         const result = await client.post<unknown>(`supplier_orders/${id}/approve`);
         if (opts.json) { printJson(result); return; }
