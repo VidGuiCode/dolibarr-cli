@@ -1,6 +1,6 @@
 {
   "name": "dolibarr-cli",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "description": "Unofficial CLI for Dolibarr ERP",
   "license": "MIT",
   "private": false,
@@ -19,7 +19,7 @@
   "scripts": {
     "prepare": "node --version",
     "build": "tsc -p tsconfig.json",
-    "clean": "powershell -NoProfile -Command \"if (Test-Path dist) { Remove-Item -Recurse -Force dist }\"",
+    "clean": "node -e \"require('fs').rmSync('dist',{recursive:true,force:true})\"",
     "dev": "bun src/cli.ts",
     "typecheck": "tsc -p tsconfig.json --noEmit",
     "test": "vitest run",

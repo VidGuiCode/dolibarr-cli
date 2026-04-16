@@ -1,5 +1,18 @@
 # Changelog
 
+## 0.1.1 — 2026-04-16
+
+### Fixed
+
+- Removed hardcoded personal default URL (`https://finance.cylro.com`) from `dolibarr config init` prompt. The prompt now shows a generic placeholder (`https://erp.example.com`) and requires the user to enter their own URL. This value should never have shipped as a default in an open-source tool.
+- `npm run clean` now works cross-platform. It previously only ran on Windows (PowerShell); it now uses a Node one-liner that works on macOS, Linux, and Windows.
+
+### Docs
+
+- `CONTRIBUTING.md` — added a rule forbidding hardcoded personal values (URLs, emails, instance names, etc.) in source, tests, docs, or examples.
+- `docs/ROADMAP.md` — reconciled the `setup` command description with what actually ships (`modules`, `company`, `conf`).
+- `README.md` — install snippet bumped to v0.1.1.
+
 ## 0.1.0 — 2026-04-11
 
 ### Added

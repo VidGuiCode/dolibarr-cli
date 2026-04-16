@@ -13,7 +13,7 @@ export function createConfigCommand(): Command {
     .description("Interactive setup: configure URL and API key")
     .action(async () => {
       try {
-        const baseUrl = await ask("Dolibarr base URL", "https://finance.cylro.com");
+        const baseUrl = await ask("Dolibarr base URL (e.g. https://erp.example.com)");
         const apiKey = await ask("API key");
 
         if (!apiKey) {

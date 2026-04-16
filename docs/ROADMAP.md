@@ -41,7 +41,7 @@ Planned improvements and features for upcoming releases. This is a living docume
 - **`dolibarr categories`** — `list`, `get`, `create`, `update`, `delete`, `objects`; multi-type support (customer, supplier, product, etc.)
 - **`dolibarr documents`** — `list`, `upload`, `download`, `delete`; modulepart-based routing
 - **`dolibarr users`** — `list`, `get`, `create`, `update`
-- **`dolibarr setup`** — `modules` (list enabled), `dictionaries` (list/get), `company` (get/set)
+- **`dolibarr setup`** — `modules` (list enabled), `company` (show info), `conf <name>` (get config constant)
 - **`dolibarr accounting`** — `ledger` (list bookkeeping entries)
 
 ### Cross-cutting features
