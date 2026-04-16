@@ -14,7 +14,7 @@ export interface LatestRelease {
 
 const GITHUB_RELEASE_URL =
   "https://api.github.com/repos/VidGuiCode/dolibarr-cli/releases/latest";
-const FETCH_TIMEOUT_MS = 5000;
+const DEFAULT_FETCH_TIMEOUT_MS = 5000;
 const DEFAULT_STALE_MS = 24 * 60 * 60 * 1000;
 
 /**
@@ -46,11 +46,15 @@ export function compareVersions(a: string, b: string): -1 | 0 | 1 {
 
 /**
  * Fetch the latest release metadata from GitHub. Returns the version (normalized)
- * and the first .tgz asset URL. Throws on network / parse error.
+ * and the first .tgz asset URL. Throws on network / parse error / timeout.
+ *
+ * @param timeoutMs abort the request if it runs longer than this. Defaults to 5s.
  */
-export async function fetchLatestRelease(): Promise<LatestRelease> {
+export async function fetchLatestRelease(
+  timeoutMs: number = DEFAULT_FETCH_TIMEOUT_MS,
+): Promise<LatestRelease> {
   const controller = new AbortController();
-  const timeout = setTimeout(() => controller.abort(), FETCH_TIMEOUT_MS);
+  const timeout = setTimeout(() => controller.abort(), timeoutMs);
 
   try {
     const res = await fetch(GITHUB_RELEASE_URL, {

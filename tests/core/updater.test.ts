@@ -13,7 +13,9 @@ import {
   type UpdateCache,
 } from "../../src/core/updater.js";
 import {
+  ensureFreshCacheOnColdStart,
   maybePrintBanner,
+  shouldColdStartCheck,
   shouldPrintBanner,
 } from "../../src/core/update-notifier.js";
 
@@ -326,5 +328,173 @@ describe("maybePrintBanner", () => {
   it("does not throw when cache is missing", () => {
     expect(() => maybePrintBanner("0.1.2")).not.toThrow();
     expect(errSpy).not.toHaveBeenCalled();
+  });
+});
+
+describe("fetchLatestRelease timeout parameter", () => {
+  beforeEach(() => {
+    vi.restoreAllMocks();
+  });
+
+  it("aborts when the request exceeds the provided timeout", async () => {
+    const fetchSpy = vi.spyOn(globalThis, "fetch").mockImplementation((_url, init) => {
+      return new Promise((_resolve, reject) => {
+        const signal = (init as RequestInit)?.signal;
+        if (signal) {
+          signal.addEventListener("abort", () => {
+            reject(new DOMException("aborted", "AbortError"));
+          });
+        }
+      });
+    });
+
+    await expect(fetchLatestRelease(50)).rejects.toThrow();
+    expect(fetchSpy).toHaveBeenCalledTimes(1);
+  });
+
+  it("uses the default 5s timeout when unspecified", async () => {
+    const fetchSpy = vi.spyOn(globalThis, "fetch").mockResolvedValue(
+      new Response(
+        JSON.stringify({
+          tag_name: "v0.1.3",
+          assets: [{ browser_download_url: "https://example.com/x.tgz" }],
+        }),
+        { status: 200 },
+      ),
+    );
+
+    const result = await fetchLatestRelease();
+    expect(result.version).toBe("0.1.3");
+    expect(fetchSpy).toHaveBeenCalledTimes(1);
+  });
+});
+
+describe("shouldColdStartCheck", () => {
+  it("returns true when cache is null and all gates pass", () => {
+    expect(
+      shouldColdStartCheck(null, ["node", "dolibarr", "status"], {}, true),
+    ).toBe(true);
+  });
+
+  it("returns false when cache already exists", () => {
+    const cache: UpdateCache = {
+      lastCheck: "2026-04-16T12:00:00.000Z",
+      latestVersion: "0.1.3",
+      currentVersion: "0.1.2",
+      assetUrl: null,
+    };
+    expect(
+      shouldColdStartCheck(cache, ["node", "dolibarr", "status"], {}, true),
+    ).toBe(false);
+  });
+
+  it("returns false on non-TTY", () => {
+    expect(
+      shouldColdStartCheck(null, ["node", "dolibarr", "status"], {}, false),
+    ).toBe(false);
+  });
+
+  it("returns false when --json is in argv", () => {
+    expect(
+      shouldColdStartCheck(
+        null,
+        ["node", "dolibarr", "invoices", "list", "--json"],
+        {},
+        true,
+      ),
+    ).toBe(false);
+  });
+
+  it("returns false when DOLIBARR_NO_UPDATE_CHECK=1", () => {
+    expect(
+      shouldColdStartCheck(
+        null,
+        ["node", "dolibarr", "status"],
+        { DOLIBARR_NO_UPDATE_CHECK: "1" },
+        true,
+      ),
+    ).toBe(false);
+  });
+
+  it("returns false for upgrade subcommand", () => {
+    expect(
+      shouldColdStartCheck(
+        null,
+        ["node", "dolibarr", "upgrade", "check"],
+        {},
+        true,
+      ),
+    ).toBe(false);
+  });
+});
+
+describe("ensureFreshCacheOnColdStart", () => {
+  let tmpPath: string;
+  let origTTY: boolean | undefined;
+
+  beforeEach(() => {
+    tmpPath = path.join(
+      os.tmpdir(),
+      `dolibarr-cli-coldstart-test-${Date.now()}-${Math.random().toString(36).slice(2)}.json`,
+    );
+    process.env.DOLIBARR_UPDATE_CACHE = tmpPath;
+    origTTY = process.stdout.isTTY;
+    Object.defineProperty(process.stdout, "isTTY", { value: true, configurable: true });
+  });
+
+  afterEach(() => {
+    delete process.env.DOLIBARR_UPDATE_CACHE;
+    if (fs.existsSync(tmpPath)) fs.unlinkSync(tmpPath);
+    Object.defineProperty(process.stdout, "isTTY", {
+      value: origTTY,
+      configurable: true,
+    });
+    vi.restoreAllMocks();
+  });
+
+  it("writes the cache when fetch resolves within the timeout", async () => {
+    vi.spyOn(globalThis, "fetch").mockResolvedValue(
+      new Response(
+        JSON.stringify({
+          tag_name: "v0.3.0",
+          assets: [
+            { browser_download_url: "https://example.com/dolibarr-cli-0.3.0.tgz" },
+          ],
+        }),
+        { status: 200 },
+      ),
+    );
+
+    await ensureFreshCacheOnColdStart("0.2.0", 500);
+
+    const cache = readCache();
+    expect(cache).not.toBeNull();
+    expect(cache!.latestVersion).toBe("0.3.0");
+    expect(cache!.currentVersion).toBe("0.2.0");
+    expect(cache!.assetUrl).toBe("https://example.com/dolibarr-cli-0.3.0.tgz");
+  });
+
+  it("does not throw when fetch fails", async () => {
+    vi.spyOn(globalThis, "fetch").mockRejectedValue(new Error("network down"));
+
+    await expect(ensureFreshCacheOnColdStart("0.2.0", 500)).resolves.toBeUndefined();
+    expect(readCache()).toBeNull();
+  });
+
+  it("is a no-op when cache already exists", async () => {
+    const existing: UpdateCache = {
+      lastCheck: "2026-04-16T12:00:00.000Z",
+      latestVersion: "0.2.0",
+      currentVersion: "0.2.0",
+      assetUrl: null,
+    };
+    writeCache(existing);
+
+    const fetchSpy = vi.spyOn(globalThis, "fetch");
+
+    await ensureFreshCacheOnColdStart("0.2.0", 500);
+
+    expect(fetchSpy).not.toHaveBeenCalled();
+    expect(readCache()).toEqual(existing);
   });
 });

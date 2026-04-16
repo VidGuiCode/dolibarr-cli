@@ -1,10 +1,14 @@
 import { spawn } from "node:child_process";
 import {
   compareVersions,
+  fetchLatestRelease,
   isCacheStale,
   readCache,
+  writeCache,
   type UpdateCache,
 } from "./updater.js";
+
+const COLD_START_TIMEOUT_MS = 1500;
 
 /**
  * Returns true if the update-available banner should be printed.
@@ -43,6 +47,61 @@ export function maybePrintBanner(currentVersion: string): void {
   console.error(
     `\u2139  dolibarr-cli v${latest} is available (you're on v${currentVersion}). Run \`dolibarr upgrade install\` to upgrade.`,
   );
+}
+
+/**
+ * Returns true if the cold-start synchronous check should run. All rules must
+ * pass: TTY stdout, no --json, no opt-out env, not inside the `upgrade`
+ * subcommand, and there's no cache at all (fresh install).
+ */
+export function shouldColdStartCheck(
+  cache: UpdateCache | null,
+  argv: string[] = process.argv,
+  env: NodeJS.ProcessEnv = process.env,
+  isTTY: boolean = Boolean(process.stdout.isTTY),
+): boolean {
+  if (!isTTY) return false;
+  if (argv.includes("--json")) return false;
+  if (env.DOLIBARR_NO_UPDATE_CHECK === "1") return false;
+  if (argv.slice(2).some((arg) => arg === "upgrade")) return false;
+  return cache === null;
+}
+
+/**
+ * On a fresh install (no cache file at all), attempt a tight synchronous fetch
+ * of the latest release so the banner can appear on the very first run. If the
+ * fetch exceeds the timeout or fails for any reason, fall through silently —
+ * the detached background scheduler will still populate the cache for the next
+ * invocation.
+ *
+ * Worst-case added latency on first-ever `dolibarr` call: ~1.5s. All subsequent
+ * calls are untouched because the cache is then non-null.
+ */
+export async function ensureFreshCacheOnColdStart(
+  currentVersion: string,
+  timeoutMs: number = COLD_START_TIMEOUT_MS,
+): Promise<void> {
+  let cache: UpdateCache | null;
+  try {
+    cache = readCache();
+  } catch {
+    return;
+  }
+  if (!shouldColdStartCheck(cache)) return;
+
+  try {
+    const latest = await fetchLatestRelease(timeoutMs);
+    writeCache({
+      lastCheck: new Date().toISOString(),
+      latestVersion: latest.version,
+      currentVersion,
+      assetUrl: latest.assetUrl,
+    });
+  } catch {
+    // Timeout / network / parse error — fall through. The detached scheduler
+    // will retry on this run, and the next invocation will show the banner
+    // once the cache lands.
+  }
 }
 
 /**

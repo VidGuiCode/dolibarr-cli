@@ -1,5 +1,20 @@
 # Changelog
 
+## 0.2.1 — 2026-04-17
+
+### Fixed
+
+- **Cold-start update banner** — on a fresh install with no cache file, the update-check banner previously couldn't appear until the second `dolibarr` invocation because the check was detached and ran asynchronously. It now runs synchronously on the first-ever invocation only, with a 1500ms timeout, so the banner can appear immediately when a newer version is available. If the fetch exceeds the timeout or fails, behavior falls back to the existing detached scheduler (cache lands in the background, banner appears on the next run). Subsequent invocations are unaffected because the cache is non-null for 24h.
+
+### Changed
+
+- `fetchLatestRelease(timeoutMs?)` in `src/core/updater.ts` now takes an optional timeout (defaults to 5000ms) so the cold-start path can use a tighter budget without affecting the detached path.
+- New exports in `src/core/update-notifier.ts`: `shouldColdStartCheck`, `ensureFreshCacheOnColdStart`. Same guard rails as the banner (TTY-only, skipped under `--json`, `DOLIBARR_NO_UPDATE_CHECK=1`, or when the `upgrade` subcommand is invoked).
+
+### Tests
+
+11 new unit tests (105 → 116). Coverage: `fetchLatestRelease` timeout parameter (aborts on small timeout, default when unspecified), `shouldColdStartCheck` across all gate combinations, `ensureFreshCacheOnColdStart` happy path, error fall-through, and no-op when cache already exists.
+
 ## 0.2.0 — 2026-04-16
 
 ### Added

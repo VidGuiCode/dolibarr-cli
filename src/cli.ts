@@ -22,6 +22,7 @@ import { createSetupCommand } from "./commands/setup.js";
 import { createAccountingCommand } from "./commands/accounting.js";
 import { createUpgradeCommand } from "./commands/upgrade.js";
 import {
+  ensureFreshCacheOnColdStart,
   maybePrintBanner,
   scheduleBackgroundCheckIfStale,
 } from "./core/update-notifier.js";
@@ -78,6 +79,7 @@ configureHelp(program);
   try {
     await program.parseAsync(process.argv);
   } finally {
+    await ensureFreshCacheOnColdStart(pkg.version);
     maybePrintBanner(pkg.version);
     scheduleBackgroundCheckIfStale();
   }

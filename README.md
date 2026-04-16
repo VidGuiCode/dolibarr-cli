@@ -5,7 +5,7 @@ Unofficial CLI for [Dolibarr ERP](https://www.dolibarr.org) — full REST API co
 ## Install
 
 ```bash
-npm install -g https://github.com/VidGuiCode/dolibarr-cli/releases/download/v0.2.0/dolibarr-cli-0.2.0.tgz
+npm install -g https://github.com/VidGuiCode/dolibarr-cli/releases/download/v0.2.1/dolibarr-cli-0.2.1.tgz
 ```
 
 Or for development:
