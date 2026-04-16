@@ -90,11 +90,13 @@ The first **minor** bump of the v0.2 program. User-facing behavior:
 - **`dolibarr projects`** — `list`, `get <id-or-ref>`, `create`, `update`, `delete`, `tasks <project-id>` (fifth ref-lookup resource).
 - **`dolibarr tickets`** — `list`, `get [id-or-ref]` (plus `--track-id <track>` to look up by public track ID), `create`, `update`, `delete`, `reply <track-id>` (posts to `/tickets/messages`).
 
-### Phase 4b → v0.2.3 — `contracts` + `shipments` + `receptions`
+### Phase 4b → v0.2.3 — `contracts` + `shipments` + `receptions` (shipped 2026-04-17)
 
 - **`dolibarr contracts`** — `list`, `get`, `create`, `update`, `delete`, `validate`, `close`, `list-lines`, `activate-line`, `deactivate-line`.
-- **`dolibarr shipments`** — `list`, `get`, `create`, `delete`, `validate`, `close`.
-- **`dolibarr receptions`** — `list`, `get`, `create`, `delete`, `validate`, `close`.
+- **`dolibarr shipments`** — `list`, `get`, `create`, `delete`, `validate` (`--no-trigger`), `close`.
+- **`dolibarr receptions`** — `list`, `get`, `create`, `delete`, `validate` (`--no-trigger`), `close`.
+
+**v0.2 program complete** — 22 command groups total (17 at v0.1.0 → +5 in v0.2.*), ref-based lookup on 6 groups, CSV output, `--fields` projection, update banner, self-upgrade.
 
 ---
 

@@ -1,5 +1,23 @@
 # Changelog
 
+## 0.2.3 — 2026-04-17
+
+### Added
+
+- **`dolibarr contracts` command group** — `list`, `get <id>`, `create`, `update`, `delete`, `validate`, `close`, `list-lines <id>`, `activate-line <id> <line-id>`, `deactivate-line <id> <line-id>`. The full lifecycle surface for contracts. `activate-line` requires `--date-start` and accepts `--date-end` + `--comment`; dates accept `YYYY-MM-DD` and are stored as Unix epoch seconds. Contracts do not expose `/ref/{ref}` on the Dolibarr side, so `get` takes a numeric id only.
+- **`dolibarr shipments` command group** — `list`, `get <id>`, `create`, `delete`, `validate`, `close`. `create` accepts `--socid`, `--order <id>` (sets `origin=commande`), `--date`, `--tracking`, and `--from-json`. `validate` accepts `--no-trigger` to suppress triggers.
+- **`dolibarr receptions` command group** — same surface as shipments: `list`, `get <id>`, `create`, `delete`, `validate`, `close`. `create` sets `origin=supplier_order` when `--order <id>` is given.
+
+### Tests
+
+25 new structural tests (132 → 157) for the three new command trees.
+
+### Docs
+
+- `README.md` — added `contracts`, `shipments`, and `receptions` to the Commands table with one usage example per group.
+- `docs/ROADMAP.md` — marked Phase 4b as shipped. The v0.2 program is now complete.
+- Heads-up: the `shipments` and `receptions` modules are **not enabled** on the source Dolibarr instance used to generate the reference docs. Endpoints for those two groups were sourced from the public Dolibarr API reference rather than a live swagger dump. `contracts` is verified against a live instance. Please open a GitHub issue if you hit drift on shipments/receptions against a module-enabled instance.
+
 ## 0.2.2 — 2026-04-17
 
 ### Added

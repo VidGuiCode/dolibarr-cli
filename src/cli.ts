@@ -22,6 +22,9 @@ import { createSetupCommand } from "./commands/setup.js";
 import { createAccountingCommand } from "./commands/accounting.js";
 import { createProjectsCommand } from "./commands/projects.js";
 import { createTicketsCommand } from "./commands/tickets.js";
+import { createContractsCommand } from "./commands/contracts.js";
+import { createShipmentsCommand } from "./commands/shipments.js";
+import { createReceptionsCommand } from "./commands/receptions.js";
 import { createUpgradeCommand } from "./commands/upgrade.js";
 import {
   ensureFreshCacheOnColdStart,
@@ -75,6 +78,9 @@ program.addCommand(createSetupCommand());
 program.addCommand(createAccountingCommand());
 program.addCommand(createProjectsCommand());
 program.addCommand(createTicketsCommand());
+program.addCommand(createContractsCommand());
+program.addCommand(createShipmentsCommand());
+program.addCommand(createReceptionsCommand());
 program.addCommand(createUpgradeCommand());
 
 configureHelp(program);

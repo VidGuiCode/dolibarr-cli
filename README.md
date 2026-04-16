@@ -5,7 +5,7 @@ Unofficial CLI for [Dolibarr ERP](https://www.dolibarr.org) — full REST API co
 ## Install
 
 ```bash
-npm install -g https://github.com/VidGuiCode/dolibarr-cli/releases/download/v0.2.2/dolibarr-cli-0.2.2.tgz
+npm install -g https://github.com/VidGuiCode/dolibarr-cli/releases/download/v0.2.3/dolibarr-cli-0.2.3.tgz
 ```
 
 Or for development:
@@ -103,6 +103,16 @@ dolibarr tickets list --thirdparty 5
 dolibarr tickets get --track-id abc123def456
 dolibarr tickets reply abc123def456 --message "Looking into this now."
 
+# Contracts
+dolibarr contracts list --thirdparty 5
+dolibarr contracts validate 12
+dolibarr contracts activate-line 12 42 --date-start 2026-01-01
+
+# Shipments & receptions
+dolibarr shipments create --socid 5 --order 123 --date 2026-01-15
+dolibarr shipments validate 7 --no-trigger
+dolibarr receptions close 3
+
 # Raw API (escape hatch)
 dolibarr raw GET /thirdparties
 dolibarr raw POST /invoices --body '{"socid": 1}'
@@ -175,6 +185,9 @@ dolibarr thirdparties create --name "Test" --supplier --dry-run
 | `setup` | Modules, dictionaries, company config |
 | `projects` | Projects and tasks |
 | `tickets` | Support / help desk tickets |
+| `contracts` | Service contracts + line activation |
+| `shipments` | Customer shipments (expeditions) |
+| `receptions` | Supplier receptions |
 
 ## Development
 
