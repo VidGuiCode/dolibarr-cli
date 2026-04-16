@@ -1,12 +1,15 @@
 import * as fs from "node:fs";
 import { Command } from "commander";
 import { createClient } from "../core/config-store.js";
-import { printInfo, printJson, printTable } from "../core/output.js";
+import { printInfo, printJson } from "../core/output.js";
 import { exitWithError } from "../core/errors.js";
 import {
+  addGetOptions,
   addListOptions,
   buildListQuery,
   dryRunJson,
+  renderGet,
+  renderList,
 } from "../core/resource-helpers.js";
 
 export function createUsersCommand(): Command {
@@ -24,61 +27,82 @@ export function createUsersCommand(): Command {
           "users",
           buildListQuery(opts),
         );
-        if (opts.json) { printJson(items); return; }
-        const rows = items.map((i) => [
-          String(i.id ?? ""),
-          String(i.login ?? ""),
-          String(i.lastname ?? ""),
-          String(i.firstname ?? ""),
-          String(i.email ?? ""),
-          Number(i.admin) === 1 ? "Yes" : "No",
-        ]);
-        printTable(rows, ["ID", "Login", "Lastname", "Firstname", "Email", "Admin"]);
-      } catch (err) { exitWithError(err, Boolean(opts.json)); }
+        renderList(items, {
+          opts,
+          columns: [
+            { key: "id", label: "ID" },
+            { key: "login", label: "Login" },
+            { key: "lastname", label: "Lastname" },
+            { key: "firstname", label: "Firstname" },
+            { key: "email", label: "Email" },
+            {
+              key: "admin",
+              label: "Admin",
+              format: (i) => (Number(i.admin) === 1 ? "Yes" : "No"),
+            },
+          ],
+        });
+      } catch (err) { exitWithError(err, Boolean(opts.json || opts.output === "json")); }
     });
 
-  cmd
-    .command("get")
-    .description("Get user details")
-    .argument("<id>", "User ID")
-    .option("--json", "Output as JSON")
+  addGetOptions(
+    cmd
+      .command("get")
+      .description("Get user details")
+      .argument("<id>", "User ID"),
+  )
     .action(async (id, opts) => {
       try {
         const client = createClient();
         const item = await client.get<Record<string, unknown>>(`users/${id}`);
-        if (opts.json) { printJson(item); return; }
-        const rows: string[][] = [
-          ["ID", String(item.id ?? "")],
-          ["Login", String(item.login ?? "")],
-          ["Lastname", String(item.lastname ?? "")],
-          ["Firstname", String(item.firstname ?? "")],
-          ["Email", String(item.email ?? "")],
-          ["Admin", Number(item.admin) === 1 ? "Yes" : "No"],
-          ["Status", String(item.statut ?? item.status ?? "")],
-        ];
-        printTable(rows, ["Field", "Value"]);
-      } catch (err) { exitWithError(err, Boolean(opts.json)); }
+        renderGet(item, {
+          opts,
+          fields: [
+            { key: "id", label: "ID" },
+            { key: "login", label: "Login" },
+            { key: "lastname", label: "Lastname" },
+            { key: "firstname", label: "Firstname" },
+            { key: "email", label: "Email" },
+            {
+              key: "admin",
+              label: "Admin",
+              format: (i) => (Number(i.admin) === 1 ? "Yes" : "No"),
+            },
+            {
+              key: "statut",
+              label: "Status",
+              format: (i) => String(i.statut ?? i.status ?? ""),
+            },
+          ],
+        });
+      } catch (err) { exitWithError(err, Boolean(opts.json || opts.output === "json")); }
     });
 
-  cmd
-    .command("me")
-    .description("Show current API user info")
-    .option("--json", "Output as JSON")
+  addGetOptions(
+    cmd
+      .command("me")
+      .description("Show current API user info"),
+  )
     .action(async (opts) => {
       try {
         const client = createClient();
         const item = await client.get<Record<string, unknown>>("users/info");
-        if (opts.json) { printJson(item); return; }
-        const rows: string[][] = [
-          ["ID", String(item.id ?? "")],
-          ["Login", String(item.login ?? "")],
-          ["Lastname", String(item.lastname ?? "")],
-          ["Firstname", String(item.firstname ?? "")],
-          ["Email", String(item.email ?? "")],
-          ["Admin", Number(item.admin) === 1 ? "Yes" : "No"],
-        ];
-        printTable(rows, ["Field", "Value"]);
-      } catch (err) { exitWithError(err, Boolean(opts.json)); }
+        renderGet(item, {
+          opts,
+          fields: [
+            { key: "id", label: "ID" },
+            { key: "login", label: "Login" },
+            { key: "lastname", label: "Lastname" },
+            { key: "firstname", label: "Firstname" },
+            { key: "email", label: "Email" },
+            {
+              key: "admin",
+              label: "Admin",
+              format: (i) => (Number(i.admin) === 1 ? "Yes" : "No"),
+            },
+          ],
+        });
+      } catch (err) { exitWithError(err, Boolean(opts.json || opts.output === "json")); }
     });
 
   cmd

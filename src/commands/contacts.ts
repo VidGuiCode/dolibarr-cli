@@ -1,13 +1,16 @@
 import * as fs from "node:fs";
 import { Command } from "commander";
 import { createClient } from "../core/config-store.js";
-import { printInfo, printJson, printTable } from "../core/output.js";
+import { printInfo, printJson } from "../core/output.js";
 import { exitWithError } from "../core/errors.js";
 import {
+  addGetOptions,
   addListOptions,
   buildListQuery,
   confirmOrCancel,
   dryRunJson,
+  renderGet,
+  renderList,
 } from "../core/resource-helpers.js";
 
 export function createContactsCommand(): Command {
@@ -25,43 +28,46 @@ export function createContactsCommand(): Command {
           "contacts",
           buildListQuery(opts),
         );
-        if (opts.json) { printJson(items); return; }
-        const rows = items.map((i) => [
-          String(i.id ?? ""),
-          String(i.lastname ?? ""),
-          String(i.firstname ?? ""),
-          String(i.email ?? ""),
-          String(i.socid ?? ""),
-          String(i.town ?? ""),
-        ]);
-        printTable(rows, ["ID", "Lastname", "Firstname", "Email", "Thirdparty", "Town"]);
-      } catch (err) { exitWithError(err, Boolean(opts.json)); }
+        renderList(items, {
+          opts,
+          columns: [
+            { key: "id", label: "ID" },
+            { key: "lastname", label: "Lastname" },
+            { key: "firstname", label: "Firstname" },
+            { key: "email", label: "Email" },
+            { key: "socid", label: "Thirdparty" },
+            { key: "town", label: "Town" },
+          ],
+        });
+      } catch (err) { exitWithError(err, Boolean(opts.json || opts.output === "json")); }
     });
 
-  cmd
-    .command("get")
-    .description("Get contact details")
-    .argument("<id>", "Contact ID")
-    .option("--json", "Output as JSON")
+  addGetOptions(
+    cmd
+      .command("get")
+      .description("Get contact details")
+      .argument("<id>", "Contact ID"),
+  )
     .action(async (id, opts) => {
       try {
         const client = createClient();
         const item = await client.get<Record<string, unknown>>(`contacts/${id}`);
-        if (opts.json) { printJson(item); return; }
-        const rows: string[][] = [
-          ["ID", String(item.id ?? "")],
-          ["Lastname", String(item.lastname ?? "")],
-          ["Firstname", String(item.firstname ?? "")],
-          ["Email", String(item.email ?? "")],
-          ["Phone", String(item.phone_pro ?? "")],
-          ["Mobile", String(item.phone_mobile ?? "")],
-          ["Thirdparty ID", String(item.socid ?? "")],
-          ["Address", String(item.address ?? "")],
-          ["Town", String(item.town ?? "")],
-          ["Zip", String(item.zip ?? "")],
-        ];
-        printTable(rows, ["Field", "Value"]);
-      } catch (err) { exitWithError(err, Boolean(opts.json)); }
+        renderGet(item, {
+          opts,
+          fields: [
+            { key: "id", label: "ID" },
+            { key: "lastname", label: "Lastname" },
+            { key: "firstname", label: "Firstname" },
+            { key: "email", label: "Email" },
+            { key: "phone_pro", label: "Phone" },
+            { key: "phone_mobile", label: "Mobile" },
+            { key: "socid", label: "Thirdparty ID" },
+            { key: "address", label: "Address" },
+            { key: "town", label: "Town" },
+            { key: "zip", label: "Zip" },
+          ],
+        });
+      } catch (err) { exitWithError(err, Boolean(opts.json || opts.output === "json")); }
     });
 
   cmd

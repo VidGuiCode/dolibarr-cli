@@ -1,13 +1,16 @@
 import * as fs from "node:fs";
 import { Command } from "commander";
 import { createClient } from "../core/config-store.js";
-import { printInfo, printJson, printTable } from "../core/output.js";
+import { printInfo, printJson } from "../core/output.js";
 import { exitWithError } from "../core/errors.js";
 import {
+  addGetOptions,
   addListOptions,
   buildListQuery,
   confirmOrCancel,
   dryRunJson,
+  renderGet,
+  renderList,
 } from "../core/resource-helpers.js";
 
 const STATUS_MAP: Record<string, string> = {
@@ -17,6 +20,9 @@ const STATUS_MAP: Record<string, string> = {
   "3": "Refused",
   "4": "Billed",
 };
+
+const tsToDate = (v: unknown): string =>
+  v ? new Date(Number(v) * 1000).toISOString().split("T")[0] : "";
 
 export function createProposalsCommand(): Command {
   const cmd = new Command("proposals").description("Manage proposals (quotes)");
@@ -38,40 +44,51 @@ export function createProposalsCommand(): Command {
             thirdparty_ids: opts.thirdparty,
           }),
         );
-        if (opts.json) { printJson(items); return; }
-        const rows = items.map((i) => [
-          String(i.id ?? ""),
-          String(i.ref ?? ""),
-          String(i.socid ?? ""),
-          String(i.total_ttc ?? ""),
-          STATUS_MAP[String(i.status)] ?? String(i.status ?? ""),
-        ]);
-        printTable(rows, ["ID", "Ref", "Thirdparty", "Total TTC", "Status"]);
-      } catch (err) { exitWithError(err, Boolean(opts.json)); }
+        renderList(items, {
+          opts,
+          columns: [
+            { key: "id", label: "ID" },
+            { key: "ref", label: "Ref" },
+            { key: "socid", label: "Thirdparty" },
+            { key: "total_ttc", label: "Total TTC" },
+            {
+              key: "status",
+              label: "Status",
+              format: (i) => STATUS_MAP[String(i.status)] ?? String(i.status ?? ""),
+            },
+          ],
+        });
+      } catch (err) { exitWithError(err, Boolean(opts.json || opts.output === "json")); }
     });
 
-  cmd
-    .command("get")
-    .description("Get proposal details")
-    .argument("<id>", "Proposal ID")
-    .option("--json", "Output as JSON")
-    .action(async (id, opts) => {
+  addGetOptions(
+    cmd
+      .command("get")
+      .description("Get proposal details (accepts numeric id or ref)")
+      .argument("<id-or-ref>", "Proposal ID or ref"),
+  )
+    .action(async (idOrRef, opts) => {
       try {
         const client = createClient();
-        const item = await client.get<Record<string, unknown>>(`proposals/${id}`);
-        if (opts.json) { printJson(item); return; }
-        const rows: string[][] = [
-          ["ID", String(item.id ?? "")],
-          ["Ref", String(item.ref ?? "")],
-          ["Thirdparty ID", String(item.socid ?? "")],
-          ["Date", item.date ? new Date(Number(item.date) * 1000).toISOString().split("T")[0] : ""],
-          ["Valid until", item.fin_validite ? new Date(Number(item.fin_validite) * 1000).toISOString().split("T")[0] : ""],
-          ["Total HT", String(item.total_ht ?? "")],
-          ["Total TTC", String(item.total_ttc ?? "")],
-          ["Status", STATUS_MAP[String(item.status)] ?? String(item.status ?? "")],
-        ];
-        printTable(rows, ["Field", "Value"]);
-      } catch (err) { exitWithError(err, Boolean(opts.json)); }
+        const item = await client.getByRefOrId<Record<string, unknown>>("proposals", idOrRef);
+        renderGet(item, {
+          opts,
+          fields: [
+            { key: "id", label: "ID" },
+            { key: "ref", label: "Ref" },
+            { key: "socid", label: "Thirdparty ID" },
+            { key: "date", label: "Date", format: (i) => tsToDate(i.date) },
+            { key: "fin_validite", label: "Valid until", format: (i) => tsToDate(i.fin_validite) },
+            { key: "total_ht", label: "Total HT" },
+            { key: "total_ttc", label: "Total TTC" },
+            {
+              key: "status",
+              label: "Status",
+              format: (i) => STATUS_MAP[String(i.status)] ?? String(i.status ?? ""),
+            },
+          ],
+        });
+      } catch (err) { exitWithError(err, Boolean(opts.json || opts.output === "json")); }
     });
 
   cmd

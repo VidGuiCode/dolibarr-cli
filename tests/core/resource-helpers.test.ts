@@ -1,11 +1,16 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 import { Command } from "commander";
 import {
+  addGetOptions,
   addListOptions,
   buildListQuery,
   confirmOrCancel,
   dryRunJson,
+  parseFields,
   prunePayload,
+  renderGet,
+  renderList,
+  resolveOutput,
 } from "../../src/core/resource-helpers.js";
 
 describe("resource-helpers", () => {
@@ -43,12 +48,14 @@ describe("resource-helpers", () => {
   });
 
   describe("addListOptions", () => {
-    it("adds --json, --limit, --page, --sort, --order, --filter", () => {
+    it("adds --output, --json, --fields, --limit, --page, --sort, --order, --filter", () => {
       const cmd = new Command("test");
       addListOptions(cmd);
       const names = cmd.options.map((o) => o.long);
       expect(names).toEqual([
+        "--output",
         "--json",
+        "--fields",
         "--limit",
         "--page",
         "--sort",
@@ -62,13 +69,215 @@ describe("resource-helpers", () => {
       expect(addListOptions(cmd)).toBe(cmd);
     });
 
-    it("applies default values for --limit and --page", () => {
+    it("applies default values for --limit, --page, --output", () => {
       const cmd = new Command("test");
       addListOptions(cmd);
       const limitOpt = cmd.options.find((o) => o.long === "--limit");
       const pageOpt = cmd.options.find((o) => o.long === "--page");
+      const outputOpt = cmd.options.find((o) => o.long === "--output");
       expect(limitOpt?.defaultValue).toBe("50");
       expect(pageOpt?.defaultValue).toBe("0");
+      expect(outputOpt?.defaultValue).toBe("table");
+    });
+  });
+
+  describe("addGetOptions", () => {
+    it("adds --output, --json, --fields", () => {
+      const cmd = new Command("test");
+      addGetOptions(cmd);
+      const names = cmd.options.map((o) => o.long);
+      expect(names).toEqual(["--output", "--json", "--fields"]);
+    });
+
+    it("returns the same command for chaining", () => {
+      const cmd = new Command("test");
+      expect(addGetOptions(cmd)).toBe(cmd);
+    });
+  });
+
+  describe("resolveOutput", () => {
+    it("returns 'table' by default", () => {
+      expect(resolveOutput({})).toBe("table");
+      expect(resolveOutput({ output: "table" })).toBe("table");
+    });
+
+    it("returns 'json' when --output json", () => {
+      expect(resolveOutput({ output: "json" })).toBe("json");
+    });
+
+    it("returns 'csv' when --output csv", () => {
+      expect(resolveOutput({ output: "csv" })).toBe("csv");
+    });
+
+    it("treats --json as alias for --output json", () => {
+      expect(resolveOutput({ json: true })).toBe("json");
+    });
+
+    it("prefers --output csv over --json for explicit csv choice", () => {
+      expect(resolveOutput({ output: "csv", json: true })).toBe("csv");
+    });
+
+    it("falls back to 'table' on unknown --output values", () => {
+      expect(resolveOutput({ output: "xml" })).toBe("table");
+    });
+  });
+
+  describe("parseFields", () => {
+    it("returns undefined when --fields absent", () => {
+      expect(parseFields({})).toBeUndefined();
+    });
+
+    it("splits comma-separated keys and trims whitespace", () => {
+      expect(parseFields({ fields: "id, ref ,total_ttc" })).toEqual([
+        "id",
+        "ref",
+        "total_ttc",
+      ]);
+    });
+
+    it("filters out empty entries", () => {
+      expect(parseFields({ fields: "id,,ref, ,total" })).toEqual(["id", "ref", "total"]);
+    });
+
+    it("returns undefined when the parsed list is empty", () => {
+      expect(parseFields({ fields: " , , " })).toBeUndefined();
+    });
+  });
+
+  describe("renderList", () => {
+    const items = [
+      { id: 1, ref: "FA-001", total: 100, status: 1 },
+      { id: 2, ref: "FA-002", total: 200, status: 2 },
+    ];
+    const columns = [
+      { key: "id", label: "ID" },
+      { key: "ref", label: "Ref" },
+      {
+        key: "status",
+        label: "Status",
+        format: (i: Record<string, unknown>) =>
+          Number(i.status) === 1 ? "Validated" : "Paid",
+      },
+    ];
+
+    it("prints table by default using column labels", () => {
+      const logSpy = vi.spyOn(console, "log").mockImplementation(() => {});
+      renderList(items, { columns, opts: {} });
+      const header = logSpy.mock.calls[0][0] as string;
+      expect(header).toContain("ID");
+      expect(header).toContain("Ref");
+      expect(header).toContain("Status");
+      // format function applied
+      const row1 = logSpy.mock.calls[2][0] as string;
+      expect(row1).toContain("Validated");
+    });
+
+    it("prints raw JSON (unprojected) by default on --output json", () => {
+      const logSpy = vi.spyOn(console, "log").mockImplementation(() => {});
+      renderList(items, { columns, opts: { output: "json" } });
+      const out = logSpy.mock.calls[0][0] as string;
+      expect(JSON.parse(out)).toEqual(items);
+    });
+
+    it("projects to --fields keys when projecting to JSON", () => {
+      const logSpy = vi.spyOn(console, "log").mockImplementation(() => {});
+      renderList(items, { columns, opts: { output: "json", fields: "id,ref" } });
+      const out = logSpy.mock.calls[0][0] as string;
+      expect(JSON.parse(out)).toEqual([
+        { id: 1, ref: "FA-001" },
+        { id: 2, ref: "FA-002" },
+      ]);
+    });
+
+    it("emits CSV with raw key headers in default mode", () => {
+      const writeSpy = vi
+        .spyOn(process.stdout, "write")
+        .mockImplementation(() => true);
+      renderList(items, { columns, opts: { output: "csv" } });
+      const out = writeSpy.mock.calls[0][0] as string;
+      const lines = out.split("\r\n").filter(Boolean);
+      expect(lines[0]).toBe("id,ref,status");
+      expect(lines[1]).toBe("1,FA-001,Validated");
+    });
+
+    it("emits CSV with --fields headers and raw projected values", () => {
+      const writeSpy = vi
+        .spyOn(process.stdout, "write")
+        .mockImplementation(() => true);
+      renderList(items, { columns, opts: { output: "csv", fields: "id,total" } });
+      const out = writeSpy.mock.calls[0][0] as string;
+      const lines = out.split("\r\n").filter(Boolean);
+      expect(lines[0]).toBe("id,total");
+      // raw value 1 vs format-mapped "Validated" — --fields bypasses format
+      expect(lines[1]).toBe("1,100");
+    });
+
+    it("emits empty string for missing keys under --fields projection", () => {
+      const writeSpy = vi
+        .spyOn(process.stdout, "write")
+        .mockImplementation(() => true);
+      renderList(items, {
+        columns,
+        opts: { output: "csv", fields: "id,nonexistent" },
+      });
+      const out = writeSpy.mock.calls[0][0] as string;
+      const lines = out.split("\r\n").filter(Boolean);
+      expect(lines[0]).toBe("id,nonexistent");
+      expect(lines[1]).toBe("1,");
+    });
+  });
+
+  describe("renderGet", () => {
+    const item = { id: 42, ref: "FA-042", total_ttc: 1234.5, status: 2 };
+    const fields = [
+      { key: "id", label: "ID" },
+      { key: "ref", label: "Ref" },
+      { key: "total_ttc", label: "Total TTC" },
+    ];
+
+    it("prints Field|Value table by default", () => {
+      const logSpy = vi.spyOn(console, "log").mockImplementation(() => {});
+      renderGet(item, { fields, opts: {} });
+      const header = logSpy.mock.calls[0][0] as string;
+      expect(header).toContain("Field");
+      expect(header).toContain("Value");
+      const firstDataRow = logSpy.mock.calls[2][0] as string;
+      expect(firstDataRow).toContain("ID");
+      expect(firstDataRow).toContain("42");
+    });
+
+    it("prints raw JSON by default on --output json", () => {
+      const logSpy = vi.spyOn(console, "log").mockImplementation(() => {});
+      renderGet(item, { fields, opts: { output: "json" } });
+      const out = logSpy.mock.calls[0][0] as string;
+      expect(JSON.parse(out)).toEqual(item);
+    });
+
+    it("projects JSON to --fields keys", () => {
+      const logSpy = vi.spyOn(console, "log").mockImplementation(() => {});
+      renderGet(item, { fields, opts: { output: "json", fields: "id,ref" } });
+      const out = logSpy.mock.calls[0][0] as string;
+      expect(JSON.parse(out)).toEqual({ id: 42, ref: "FA-042" });
+    });
+
+    it("emits single-row CSV under --fields", () => {
+      const writeSpy = vi
+        .spyOn(process.stdout, "write")
+        .mockImplementation(() => true);
+      renderGet(item, { fields, opts: { output: "csv", fields: "id,ref,total_ttc" } });
+      const out = writeSpy.mock.calls[0][0] as string;
+      const lines = out.split("\r\n").filter(Boolean);
+      expect(lines).toEqual(["id,ref,total_ttc", "42,FA-042,1234.5"]);
+    });
+
+    it("emits single-row CSV using column spec in default mode", () => {
+      const writeSpy = vi
+        .spyOn(process.stdout, "write")
+        .mockImplementation(() => true);
+      renderGet(item, { fields, opts: { output: "csv" } });
+      const out = writeSpy.mock.calls[0][0] as string;
+      const lines = out.split("\r\n").filter(Boolean);
+      expect(lines).toEqual(["id,ref,total_ttc", "42,FA-042,1234.5"]);
     });
   });
 

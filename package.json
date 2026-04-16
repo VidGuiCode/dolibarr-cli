@@ -1,6 +1,6 @@
 {
   "name": "dolibarr-cli",
-  "version": "0.1.2",
+  "version": "0.2.0",
   "description": "Unofficial CLI for Dolibarr ERP",
   "license": "MIT",
   "private": false,

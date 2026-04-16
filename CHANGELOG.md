@@ -1,5 +1,24 @@
 # Changelog
 
+## 0.2.0 — 2026-04-16
+
+### Added
+
+- **Ref-based lookup** — `dolibarr <group> get <id-or-ref>` now accepts a human ref (e.g. `FA2501-0001`) in addition to a numeric id. All-digit input routes to `GET /{resource}/{id}`; anything else routes to `GET /{resource}/ref/{ref}` with proper URL encoding. Enabled on the four resource groups whose Dolibarr API exposes `/ref/{ref}`: `invoices`, `orders`, `proposals`, `categories`. Other groups still require numeric ids.
+- **`--output <format>` flag** on all `list` and `get` commands. Formats: `table` (default), `json`, `csv`. `--json` is kept as a back-compat alias for `--output json`; `--output csv` takes precedence when both are set.
+- **CSV output** — new `printCsv` helper in `src/core/output.ts` with RFC 4180 escaping (fields containing `,`, `"`, `\r`, `\n` are quoted; internal `"` is doubled; `\r\n` line terminators). CSV headers use the raw Dolibarr field key (not the human label) so downstream tools get a stable schema.
+- **`--fields a,b,c` flag** on all `list` and `get` commands. Projects the output to exactly the columns listed, using raw Dolibarr field keys. Works across all three formats. Missing keys render as empty strings. When `--fields` is set, format functions are bypassed so values pass through raw — e.g. `--fields status` on invoices emits `0` / `1` / `2` rather than `Draft` / `Validated` / `Paid`.
+
+### Changed
+
+- `src/core/api-client.ts` — added `getByRefOrId<T>(resource, idOrRef)` used by the four ref-capable `get` actions.
+- `src/core/resource-helpers.ts` — `addListOptions` and `addGetOptions` now both register `--output`, `--json`, and `--fields`. New exports: `resolveOutput`, `parseFields`, `renderList`, `renderGet`, `ColumnSpec`. `renderList` / `renderGet` consolidate the format-switching logic that was previously duplicated in every resource file.
+- All 14 resource command files were refactored to render lists and single-record views through `renderList` / `renderGet` instead of hand-rolled switches. No user-visible behavior change on the default `table` output beyond the new flags.
+
+### Tests
+
+- 34 new unit tests. Test total: 71 → 105. Coverage: `getByRefOrId` (numeric→id path, ref→encoded path, URL encoding, whitespace trim), `printCsv` (RFC 4180 escaping, CRLF, empty rows, headers-only), `renderList` / `renderGet` (table / json / csv / `--fields` projection / missing keys), `resolveOutput` precedence, `parseFields` edge cases.
+
 ## 0.1.2 — 2026-04-16
 
 ### Added

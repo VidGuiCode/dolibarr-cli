@@ -4,10 +4,13 @@ import { createClient } from "../core/config-store.js";
 import { printInfo, printJson, printTable } from "../core/output.js";
 import { exitWithError } from "../core/errors.js";
 import {
+  addGetOptions,
   addListOptions,
   buildListQuery,
   confirmOrCancel,
   dryRunJson,
+  renderGet,
+  renderList,
 } from "../core/resource-helpers.js";
 
 export function createProductsCommand(): Command {
@@ -36,48 +39,63 @@ export function createProductsCommand(): Command {
             includestockdata: opts.includeStock ? 1 : undefined,
           }),
         );
-        if (opts.json) { printJson(items); return; }
-        const rows = items.map((i) => [
-          String(i.id ?? ""),
-          String(i.ref ?? ""),
-          String(i.label ?? ""),
-          String(i.price ?? ""),
-          Number(i.type) === 1 ? "Service" : "Product",
-          String(i.status ?? ""),
-        ]);
-        printTable(rows, ["ID", "Ref", "Label", "Price", "Type", "Status"]);
-      } catch (err) { exitWithError(err, Boolean(opts.json)); }
+        renderList(items, {
+          opts,
+          columns: [
+            { key: "id", label: "ID" },
+            { key: "ref", label: "Ref" },
+            { key: "label", label: "Label" },
+            { key: "price", label: "Price" },
+            {
+              key: "type",
+              label: "Type",
+              format: (i) => (Number(i.type) === 1 ? "Service" : "Product"),
+            },
+            { key: "status", label: "Status" },
+          ],
+        });
+      } catch (err) { exitWithError(err, Boolean(opts.json || opts.output === "json")); }
     });
 
-  cmd
-    .command("get")
-    .description("Get product details")
-    .argument("<id>", "Product ID")
-    .option("--json", "Output as JSON")
-    .option("--include-stock", "Include stock data")
+  addGetOptions(
+    cmd
+      .command("get")
+      .description("Get product details")
+      .argument("<id>", "Product ID")
+      .option("--include-stock", "Include stock data"),
+  )
     .action(async (id, opts) => {
       try {
         const client = createClient();
         const item = await client.get<Record<string, unknown>>(`products/${id}`, {
           includestockdata: opts.includeStock ? 1 : undefined,
         });
-        if (opts.json) { printJson(item); return; }
-        const rows: string[][] = [
-          ["ID", String(item.id ?? "")],
-          ["Ref", String(item.ref ?? "")],
-          ["Label", String(item.label ?? "")],
-          ["Type", Number(item.type) === 1 ? "Service" : "Product"],
-          ["Price", String(item.price ?? "")],
-          ["Price TTC", String(item.price_ttc ?? "")],
-          ["VAT rate", String(item.tva_tx ?? "")],
-          ["Barcode", String(item.barcode ?? "")],
-          ["Description", String(item.description ?? "").substring(0, 80)],
-          ["Status (sell)", String(item.status ?? "")],
-          ["Status (buy)", String(item.status_buy ?? "")],
-          ["Stock", String(item.stock_reel ?? "")],
-        ];
-        printTable(rows, ["Field", "Value"]);
-      } catch (err) { exitWithError(err, Boolean(opts.json)); }
+        renderGet(item, {
+          opts,
+          fields: [
+            { key: "id", label: "ID" },
+            { key: "ref", label: "Ref" },
+            { key: "label", label: "Label" },
+            {
+              key: "type",
+              label: "Type",
+              format: (i) => (Number(i.type) === 1 ? "Service" : "Product"),
+            },
+            { key: "price", label: "Price" },
+            { key: "price_ttc", label: "Price TTC" },
+            { key: "tva_tx", label: "VAT rate" },
+            { key: "barcode", label: "Barcode" },
+            {
+              key: "description",
+              label: "Description",
+              format: (i) => String(i.description ?? "").substring(0, 80),
+            },
+            { key: "status", label: "Status (sell)" },
+            { key: "status_buy", label: "Status (buy)" },
+            { key: "stock_reel", label: "Stock" },
+          ],
+        });
+      } catch (err) { exitWithError(err, Boolean(opts.json || opts.output === "json")); }
     });
 
   cmd

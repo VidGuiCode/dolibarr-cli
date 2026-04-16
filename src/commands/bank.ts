@@ -1,11 +1,14 @@
 import { Command } from "commander";
 import { createClient } from "../core/config-store.js";
-import { printInfo, printJson, printTable } from "../core/output.js";
+import { printInfo, printJson } from "../core/output.js";
 import { exitWithError } from "../core/errors.js";
 import {
+  addGetOptions,
   addListOptions,
   buildListQuery,
   dryRunJson,
+  renderGet,
+  renderList,
 } from "../core/resource-helpers.js";
 
 export function createBankCommand(): Command {
@@ -23,40 +26,51 @@ export function createBankCommand(): Command {
           "bankaccounts",
           buildListQuery(opts),
         );
-        if (opts.json) { printJson(items); return; }
-        const rows = items.map((i) => [
-          String(i.id ?? ""),
-          String(i.label ?? ""),
-          String(i.number ?? ""),
-          String(i.solde ?? i.balance ?? ""),
-          String(i.currency_code ?? ""),
-        ]);
-        printTable(rows, ["ID", "Label", "Number", "Balance", "Currency"]);
-      } catch (err) { exitWithError(err, Boolean(opts.json)); }
+        renderList(items, {
+          opts,
+          columns: [
+            { key: "id", label: "ID" },
+            { key: "label", label: "Label" },
+            { key: "number", label: "Number" },
+            {
+              key: "solde",
+              label: "Balance",
+              format: (i) => String(i.solde ?? i.balance ?? ""),
+            },
+            { key: "currency_code", label: "Currency" },
+          ],
+        });
+      } catch (err) { exitWithError(err, Boolean(opts.json || opts.output === "json")); }
     });
 
-  cmd
-    .command("get")
-    .description("Get bank account details")
-    .argument("<id>", "Bank account ID")
-    .option("--json", "Output as JSON")
+  addGetOptions(
+    cmd
+      .command("get")
+      .description("Get bank account details")
+      .argument("<id>", "Bank account ID"),
+  )
     .action(async (id, opts) => {
       try {
         const client = createClient();
         const item = await client.get<Record<string, unknown>>(`bankaccounts/${id}`);
-        if (opts.json) { printJson(item); return; }
-        const rows: string[][] = [
-          ["ID", String(item.id ?? "")],
-          ["Label", String(item.label ?? "")],
-          ["Number", String(item.number ?? "")],
-          ["IBAN", String(item.iban ?? "")],
-          ["BIC", String(item.bic ?? "")],
-          ["Balance", String(item.solde ?? item.balance ?? "")],
-          ["Currency", String(item.currency_code ?? "")],
-          ["Status", String(item.status ?? "")],
-        ];
-        printTable(rows, ["Field", "Value"]);
-      } catch (err) { exitWithError(err, Boolean(opts.json)); }
+        renderGet(item, {
+          opts,
+          fields: [
+            { key: "id", label: "ID" },
+            { key: "label", label: "Label" },
+            { key: "number", label: "Number" },
+            { key: "iban", label: "IBAN" },
+            { key: "bic", label: "BIC" },
+            {
+              key: "solde",
+              label: "Balance",
+              format: (i) => String(i.solde ?? i.balance ?? ""),
+            },
+            { key: "currency_code", label: "Currency" },
+            { key: "status", label: "Status" },
+          ],
+        });
+      } catch (err) { exitWithError(err, Boolean(opts.json || opts.output === "json")); }
     });
 
   cmd
@@ -83,13 +97,14 @@ export function createBankCommand(): Command {
       } catch (err) { exitWithError(err, Boolean(opts.json)); }
     });
 
-  cmd
-    .command("transactions")
-    .description("List transactions for a bank account")
-    .argument("<account-id>", "Bank account ID")
-    .option("--json", "Output as JSON")
-    .option("--limit <n>", "Results per page", "50")
-    .option("--page <n>", "Page number (0-indexed)", "0")
+  addGetOptions(
+    cmd
+      .command("transactions")
+      .description("List transactions for a bank account")
+      .argument("<account-id>", "Bank account ID")
+      .option("--limit <n>", "Results per page", "50")
+      .option("--page <n>", "Page number (0-indexed)", "0"),
+  )
     .action(async (accountId, opts) => {
       try {
         const client = createClient();
@@ -97,16 +112,24 @@ export function createBankCommand(): Command {
           limit: opts.limit,
           page: opts.page,
         });
-        if (opts.json) { printJson(items); return; }
-        const rows = items.map((i) => [
-          String(i.id ?? ""),
-          i.dateo ? new Date(Number(i.dateo) * 1000).toISOString().split("T")[0] : String(i.dateo ?? ""),
-          String(i.label ?? ""),
-          String(i.amount ?? ""),
-          String(i.fk_type ?? ""),
-        ]);
-        printTable(rows, ["ID", "Date", "Label", "Amount", "Type"]);
-      } catch (err) { exitWithError(err, Boolean(opts.json)); }
+        renderList(items, {
+          opts,
+          columns: [
+            { key: "id", label: "ID" },
+            {
+              key: "dateo",
+              label: "Date",
+              format: (i) =>
+                i.dateo
+                  ? new Date(Number(i.dateo) * 1000).toISOString().split("T")[0]
+                  : String(i.dateo ?? ""),
+            },
+            { key: "label", label: "Label" },
+            { key: "amount", label: "Amount" },
+            { key: "fk_type", label: "Type" },
+          ],
+        });
+      } catch (err) { exitWithError(err, Boolean(opts.json || opts.output === "json")); }
     });
 
   cmd

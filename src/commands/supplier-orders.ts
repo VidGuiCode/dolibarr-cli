@@ -1,13 +1,16 @@
 import * as fs from "node:fs";
 import { Command } from "commander";
 import { createClient } from "../core/config-store.js";
-import { printInfo, printJson, printTable } from "../core/output.js";
+import { printInfo, printJson } from "../core/output.js";
 import { exitWithError } from "../core/errors.js";
 import {
+  addGetOptions,
   addListOptions,
   buildListQuery,
   confirmOrCancel,
   dryRunJson,
+  renderGet,
+  renderList,
 } from "../core/resource-helpers.js";
 
 const STATUS_MAP: Record<string, string> = {
@@ -20,6 +23,9 @@ const STATUS_MAP: Record<string, string> = {
   "6": "Canceled",
   "9": "Refused",
 };
+
+const tsToDate = (v: unknown): string =>
+  v ? new Date(Number(v) * 1000).toISOString().split("T")[0] : "";
 
 export function createSupplierOrdersCommand(): Command {
   const cmd = new Command("supplier-orders").description("Manage supplier orders");
@@ -41,39 +47,50 @@ export function createSupplierOrdersCommand(): Command {
             thirdparty_ids: opts.thirdparty,
           }),
         );
-        if (opts.json) { printJson(items); return; }
-        const rows = items.map((i) => [
-          String(i.id ?? ""),
-          String(i.ref ?? ""),
-          String(i.socid ?? ""),
-          String(i.total_ttc ?? ""),
-          STATUS_MAP[String(i.status)] ?? String(i.status ?? ""),
-        ]);
-        printTable(rows, ["ID", "Ref", "Supplier", "Total TTC", "Status"]);
-      } catch (err) { exitWithError(err, Boolean(opts.json)); }
+        renderList(items, {
+          opts,
+          columns: [
+            { key: "id", label: "ID" },
+            { key: "ref", label: "Ref" },
+            { key: "socid", label: "Supplier" },
+            { key: "total_ttc", label: "Total TTC" },
+            {
+              key: "status",
+              label: "Status",
+              format: (i) => STATUS_MAP[String(i.status)] ?? String(i.status ?? ""),
+            },
+          ],
+        });
+      } catch (err) { exitWithError(err, Boolean(opts.json || opts.output === "json")); }
     });
 
-  cmd
-    .command("get")
-    .description("Get supplier order details")
-    .argument("<id>", "Order ID")
-    .option("--json", "Output as JSON")
+  addGetOptions(
+    cmd
+      .command("get")
+      .description("Get supplier order details")
+      .argument("<id>", "Order ID"),
+  )
     .action(async (id, opts) => {
       try {
         const client = createClient();
         const item = await client.get<Record<string, unknown>>(`supplier_orders/${id}`);
-        if (opts.json) { printJson(item); return; }
-        const rows: string[][] = [
-          ["ID", String(item.id ?? "")],
-          ["Ref", String(item.ref ?? "")],
-          ["Supplier ID", String(item.socid ?? "")],
-          ["Date", item.date ? new Date(Number(item.date) * 1000).toISOString().split("T")[0] : ""],
-          ["Total HT", String(item.total_ht ?? "")],
-          ["Total TTC", String(item.total_ttc ?? "")],
-          ["Status", STATUS_MAP[String(item.status)] ?? String(item.status ?? "")],
-        ];
-        printTable(rows, ["Field", "Value"]);
-      } catch (err) { exitWithError(err, Boolean(opts.json)); }
+        renderGet(item, {
+          opts,
+          fields: [
+            { key: "id", label: "ID" },
+            { key: "ref", label: "Ref" },
+            { key: "socid", label: "Supplier ID" },
+            { key: "date", label: "Date", format: (i) => tsToDate(i.date) },
+            { key: "total_ht", label: "Total HT" },
+            { key: "total_ttc", label: "Total TTC" },
+            {
+              key: "status",
+              label: "Status",
+              format: (i) => STATUS_MAP[String(i.status)] ?? String(i.status ?? ""),
+            },
+          ],
+        });
+      } catch (err) { exitWithError(err, Boolean(opts.json || opts.output === "json")); }
     });
 
   cmd

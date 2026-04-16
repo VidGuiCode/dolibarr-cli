@@ -189,6 +189,60 @@ describe("DolibarrApiClient", () => {
     });
   });
 
+  describe("getByRefOrId", () => {
+    it("treats all-digit input as numeric id", async () => {
+      const client = new DolibarrApiClient(baseOptions);
+      const fetchSpy = vi.spyOn(globalThis, "fetch").mockResolvedValue(
+        new Response(JSON.stringify({ id: 42 }), { status: 200 }),
+      );
+
+      await client.getByRefOrId("invoices", "42");
+
+      expect(fetchSpy.mock.calls[0][0]).toBe(
+        "https://erp.example.com/api/index.php/invoices/42",
+      );
+    });
+
+    it("treats non-numeric input as ref", async () => {
+      const client = new DolibarrApiClient(baseOptions);
+      const fetchSpy = vi.spyOn(globalThis, "fetch").mockResolvedValue(
+        new Response(JSON.stringify({ id: 1, ref: "FA2501-0001" }), { status: 200 }),
+      );
+
+      await client.getByRefOrId("invoices", "FA2501-0001");
+
+      expect(fetchSpy.mock.calls[0][0]).toBe(
+        "https://erp.example.com/api/index.php/invoices/ref/FA2501-0001",
+      );
+    });
+
+    it("URL-encodes special characters in ref", async () => {
+      const client = new DolibarrApiClient(baseOptions);
+      const fetchSpy = vi.spyOn(globalThis, "fetch").mockResolvedValue(
+        new Response(JSON.stringify({ id: 1 }), { status: 200 }),
+      );
+
+      await client.getByRefOrId("orders", "CMD 2025/01");
+
+      expect(fetchSpy.mock.calls[0][0]).toBe(
+        "https://erp.example.com/api/index.php/orders/ref/CMD%202025%2F01",
+      );
+    });
+
+    it("trims whitespace from input", async () => {
+      const client = new DolibarrApiClient(baseOptions);
+      const fetchSpy = vi.spyOn(globalThis, "fetch").mockResolvedValue(
+        new Response(JSON.stringify({ id: 7 }), { status: 200 }),
+      );
+
+      await client.getByRefOrId("proposals", "  7  ");
+
+      expect(fetchSpy.mock.calls[0][0]).toBe(
+        "https://erp.example.com/api/index.php/proposals/7",
+      );
+    });
+  });
+
   describe("retry logic", () => {
     it("retries on 500 and succeeds", async () => {
       const client = new DolibarrApiClient({ ...baseOptions, retries: 2, retryDelay: 10 });

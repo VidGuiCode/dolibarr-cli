@@ -55,3 +55,20 @@ export function printTable(rows: string[][], headers?: string[]): void {
     console.log(row.map((cell, i) => (cell ?? "").padEnd(widths[i])).join("   "));
   }
 }
+
+function csvEscape(field: string): string {
+  if (/[",\r\n]/.test(field)) {
+    return `"${field.replace(/"/g, '""')}"`;
+  }
+  return field;
+}
+
+export function printCsv(rows: string[][], headers?: string[]): void {
+  const lines: string[] = [];
+  if (headers) lines.push(headers.map(csvEscape).join(","));
+  for (const row of rows) {
+    lines.push(row.map((c) => csvEscape(c ?? "")).join(","));
+  }
+  if (lines.length === 0) return;
+  process.stdout.write(lines.join("\r\n") + "\r\n");
+}

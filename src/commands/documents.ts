@@ -2,20 +2,26 @@ import * as fs from "node:fs";
 import * as path from "node:path";
 import { Command } from "commander";
 import { createClient } from "../core/config-store.js";
-import { printInfo, printJson, printTable } from "../core/output.js";
+import { printInfo, printJson } from "../core/output.js";
 import { exitWithError } from "../core/errors.js";
-import { confirmOrCancel, dryRunJson } from "../core/resource-helpers.js";
+import {
+  addGetOptions,
+  confirmOrCancel,
+  dryRunJson,
+  renderList,
+} from "../core/resource-helpers.js";
 
 export function createDocumentsCommand(): Command {
   const cmd = new Command("documents").description("Manage documents and files");
 
-  cmd
-    .command("list")
-    .description("List documents for a module/object")
-    .requiredOption("--module <modulepart>", "Module (facture, commande, societe, product, etc.)")
-    .option("--id <id>", "Object ID")
-    .option("--ref <ref>", "Object reference")
-    .option("--json", "Output as JSON")
+  addGetOptions(
+    cmd
+      .command("list")
+      .description("List documents for a module/object")
+      .requiredOption("--module <modulepart>", "Module (facture, commande, societe, product, etc.)")
+      .option("--id <id>", "Object ID")
+      .option("--ref <ref>", "Object reference"),
+  )
     .action(async (opts) => {
       try {
         const client = createClient();
@@ -24,15 +30,21 @@ export function createDocumentsCommand(): Command {
           id: opts.id,
           ref: opts.ref,
         });
-        if (opts.json) { printJson(items); return; }
-        const rows = items.map((i) => [
-          String(i.name ?? ""),
-          String(i.size ?? ""),
-          String(i.type ?? ""),
-          i.date ? new Date(Number(i.date) * 1000).toISOString().split("T")[0] : "",
-        ]);
-        printTable(rows, ["Name", "Size", "Type", "Date"]);
-      } catch (err) { exitWithError(err, Boolean(opts.json)); }
+        renderList(items, {
+          opts,
+          columns: [
+            { key: "name", label: "Name" },
+            { key: "size", label: "Size" },
+            { key: "type", label: "Type" },
+            {
+              key: "date",
+              label: "Date",
+              format: (i) =>
+                i.date ? new Date(Number(i.date) * 1000).toISOString().split("T")[0] : "",
+            },
+          ],
+        });
+      } catch (err) { exitWithError(err, Boolean(opts.json || opts.output === "json")); }
     });
 
   cmd

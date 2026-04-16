@@ -1,14 +1,17 @@
 import * as fs from "node:fs";
 import { Command } from "commander";
 import { createClient } from "../core/config-store.js";
-import { printInfo, printJson, printTable } from "../core/output.js";
+import { printInfo, printJson } from "../core/output.js";
 import { exitWithError } from "../core/errors.js";
 import {
+  addGetOptions,
   addListOptions,
   buildListQuery,
   confirmOrCancel,
   dryRunJson,
   prunePayload,
+  renderGet,
+  renderList,
 } from "../core/resource-helpers.js";
 
 function thirdpartyType(item: Record<string, unknown>): string {
@@ -46,44 +49,46 @@ export function createThirdpartiesCommand(): Command {
           buildListQuery(opts, { mode, category: opts.category }),
         );
 
-        if (opts.json) { printJson(items); return; }
-
-        const rows = items.map((i) => [
-          String(i.id ?? ""),
-          String(i.name ?? ""),
-          thirdpartyType(i),
-          String(i.town ?? ""),
-          String(i.status ?? ""),
-        ]);
-        printTable(rows, ["ID", "Name", "Type", "Town", "Status"]);
-      } catch (err) { exitWithError(err, Boolean(opts.json)); }
+        renderList(items, {
+          opts,
+          columns: [
+            { key: "id", label: "ID" },
+            { key: "name", label: "Name" },
+            { key: "client", label: "Type", format: thirdpartyType },
+            { key: "town", label: "Town" },
+            { key: "status", label: "Status" },
+          ],
+        });
+      } catch (err) { exitWithError(err, Boolean(opts.json || opts.output === "json")); }
     });
 
-  cmd
-    .command("get")
-    .description("Get thirdparty details")
-    .argument("<id>", "Thirdparty ID")
-    .option("--json", "Output as JSON")
+  addGetOptions(
+    cmd
+      .command("get")
+      .description("Get thirdparty details")
+      .argument("<id>", "Thirdparty ID"),
+  )
     .action(async (id, opts) => {
       try {
         const client = createClient();
         const item = await client.get<Record<string, unknown>>(`thirdparties/${id}`);
-        if (opts.json) { printJson(item); return; }
-        const rows: string[][] = [
-          ["ID", String(item.id ?? "")],
-          ["Name", String(item.name ?? "")],
-          ["Type", thirdpartyType(item)],
-          ["Email", String(item.email ?? "")],
-          ["Phone", String(item.phone ?? "")],
-          ["Town", String(item.town ?? "")],
-          ["Zip", String(item.zip ?? "")],
-          ["Country", String(item.country ?? "")],
-          ["Status", String(item.status ?? "")],
-          ["Code client", String(item.code_client ?? "")],
-          ["Code fournisseur", String(item.code_fournisseur ?? "")],
-        ];
-        printTable(rows, ["Field", "Value"]);
-      } catch (err) { exitWithError(err, Boolean(opts.json)); }
+        renderGet(item, {
+          opts,
+          fields: [
+            { key: "id", label: "ID" },
+            { key: "name", label: "Name" },
+            { key: "client", label: "Type", format: thirdpartyType },
+            { key: "email", label: "Email" },
+            { key: "phone", label: "Phone" },
+            { key: "town", label: "Town" },
+            { key: "zip", label: "Zip" },
+            { key: "country", label: "Country" },
+            { key: "status", label: "Status" },
+            { key: "code_client", label: "Code client" },
+            { key: "code_fournisseur", label: "Code fournisseur" },
+          ],
+        });
+      } catch (err) { exitWithError(err, Boolean(opts.json || opts.output === "json")); }
     });
 
   cmd

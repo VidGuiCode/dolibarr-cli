@@ -5,7 +5,7 @@ Unofficial CLI for [Dolibarr ERP](https://www.dolibarr.org) — full REST API co
 ## Install
 
 ```bash
-npm install -g https://github.com/VidGuiCode/dolibarr-cli/releases/download/v0.1.2/dolibarr-cli-0.1.2.tgz
+npm install -g https://github.com/VidGuiCode/dolibarr-cli/releases/download/v0.2.0/dolibarr-cli-0.2.0.tgz
 ```
 
 Or for development:
@@ -62,6 +62,7 @@ dolibarr thirdparties create --name "Acme Corp" --supplier --dry-run
 dolibarr invoices list --year 2025
 dolibarr invoices list --status paid --output json
 dolibarr invoices get 12
+dolibarr invoices get FA2501-0001            # look up by ref (invoices, orders, proposals, categories)
 dolibarr invoices validate 12
 dolibarr invoices pay 12 --amount 500.00 --date 2025-12-01
 
@@ -100,13 +101,35 @@ dolibarr raw PUT /thirdparties/5 --body '{"fournisseur": 1}'
 
 ## Output Formats
 
-All read commands support `--output` (or `--json` shorthand):
+All `list` and `get` commands support `--output <format>` where format is `table` (default), `json`, or `csv`. `--json` is kept as a back-compat alias for `--output json`.
 
 ```bash
 dolibarr invoices list                     # table (default)
 dolibarr invoices list --output json       # JSON
 dolibarr invoices list --json              # JSON (shorthand)
-dolibarr invoices list --output csv        # CSV
+dolibarr invoices list --output csv        # CSV (RFC 4180, raw field keys as headers)
+```
+
+### Column projection with `--fields`
+
+Pick exactly the columns you want, using the raw Dolibarr field keys. Works across all three output formats.
+
+```bash
+dolibarr invoices list --fields id,ref,total_ttc
+dolibarr invoices list --fields id,ref,status --output csv > invoices.csv
+dolibarr thirdparties get 5 --fields id,name,email,town --output json
+```
+
+With `--fields`, values pass through raw — e.g. `--fields status` emits the numeric code (`0` / `1` / `2`) rather than the mapped label (`Draft` / `Validated` / `Paid`). Missing keys render as empty strings.
+
+### Ref-based lookup
+
+`get` accepts a human ref in place of a numeric id for resources whose Dolibarr API exposes `/ref/{ref}` — **invoices, orders, proposals, categories**. All-digit input is still treated as an id.
+
+```bash
+dolibarr invoices get FA2501-0001
+dolibarr orders get CO2501-0042
+dolibarr proposals get PR2501-0007
 ```
 
 ## Dry Run

@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
-import { printTable, printJson, printInfo, printError } from "../../src/core/output.js";
+import { printTable, printJson, printInfo, printError, printCsv } from "../../src/core/output.js";
 
 describe("output", () => {
   beforeEach(() => {
@@ -91,6 +91,80 @@ describe("output", () => {
       printInfo("Hello world");
 
       expect(logSpy).toHaveBeenCalledWith("Hello world");
+    });
+  });
+
+  describe("printCsv", () => {
+    it("writes headers and plain rows with CRLF terminators", () => {
+      const writeSpy = vi.spyOn(process.stdout, "write").mockImplementation(() => true);
+
+      printCsv(
+        [
+          ["1", "Alice", "alice@test.com"],
+          ["2", "Bob", "bob@example.com"],
+        ],
+        ["id", "name", "email"],
+      );
+
+      expect(writeSpy).toHaveBeenCalledTimes(1);
+      const output = writeSpy.mock.calls[0][0] as string;
+      expect(output).toBe(
+        "id,name,email\r\n1,Alice,alice@test.com\r\n2,Bob,bob@example.com\r\n",
+      );
+    });
+
+    it("quotes fields containing commas", () => {
+      const writeSpy = vi.spyOn(process.stdout, "write").mockImplementation(() => true);
+
+      printCsv([["1", "Doe, John", "x"]], ["id", "name", "x"]);
+
+      const output = writeSpy.mock.calls[0][0] as string;
+      expect(output).toContain(`1,"Doe, John",x`);
+    });
+
+    it("escapes double quotes by doubling them", () => {
+      const writeSpy = vi.spyOn(process.stdout, "write").mockImplementation(() => true);
+
+      printCsv([[`say "hi"`]], ["msg"]);
+
+      const output = writeSpy.mock.calls[0][0] as string;
+      expect(output).toContain(`"say ""hi"""`);
+    });
+
+    it("quotes fields containing newlines", () => {
+      const writeSpy = vi.spyOn(process.stdout, "write").mockImplementation(() => true);
+
+      printCsv([[`line1\nline2`]], ["note"]);
+
+      const output = writeSpy.mock.calls[0][0] as string;
+      expect(output).toContain(`"line1\nline2"`);
+    });
+
+    it("handles missing cells as empty strings", () => {
+      const writeSpy = vi.spyOn(process.stdout, "write").mockImplementation(() => true);
+
+      // @ts-expect-error deliberately passing sparse row
+      printCsv([["1", undefined, "x"]], ["a", "b", "c"]);
+
+      const output = writeSpy.mock.calls[0][0] as string;
+      expect(output).toBe("a,b,c\r\n1,,x\r\n");
+    });
+
+    it("does nothing for empty rows with no headers", () => {
+      const writeSpy = vi.spyOn(process.stdout, "write").mockImplementation(() => true);
+
+      printCsv([]);
+
+      expect(writeSpy).not.toHaveBeenCalled();
+    });
+
+    it("writes headers only when rows are empty", () => {
+      const writeSpy = vi.spyOn(process.stdout, "write").mockImplementation(() => true);
+
+      printCsv([], ["id", "name"]);
+
+      expect(writeSpy).toHaveBeenCalledTimes(1);
+      expect(writeSpy.mock.calls[0][0]).toBe("id,name\r\n");
     });
   });
 

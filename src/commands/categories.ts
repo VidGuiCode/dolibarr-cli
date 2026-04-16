@@ -1,13 +1,16 @@
 import * as fs from "node:fs";
 import { Command } from "commander";
 import { createClient } from "../core/config-store.js";
-import { printInfo, printJson, printTable } from "../core/output.js";
+import { printInfo, printJson } from "../core/output.js";
 import { exitWithError } from "../core/errors.js";
 import {
+  addGetOptions,
   addListOptions,
   buildListQuery,
   confirmOrCancel,
   dryRunJson,
+  renderGet,
+  renderList,
 } from "../core/resource-helpers.js";
 
 const TYPE_MAP: Record<string, string> = {
@@ -40,37 +43,52 @@ export function createCategoriesCommand(): Command {
           "categories",
           buildListQuery(opts, { type: opts.type }),
         );
-        if (opts.json) { printJson(items); return; }
-        const rows = items.map((i) => [
-          String(i.id ?? ""),
-          String(i.label ?? ""),
-          TYPE_MAP[String(i.type)] ?? String(i.type ?? ""),
-          String(i.description ?? "").substring(0, 40),
-        ]);
-        printTable(rows, ["ID", "Label", "Type", "Description"]);
-      } catch (err) { exitWithError(err, Boolean(opts.json)); }
+        renderList(items, {
+          opts,
+          columns: [
+            { key: "id", label: "ID" },
+            { key: "label", label: "Label" },
+            {
+              key: "type",
+              label: "Type",
+              format: (i) => TYPE_MAP[String(i.type)] ?? String(i.type ?? ""),
+            },
+            {
+              key: "description",
+              label: "Description",
+              format: (i) => String(i.description ?? "").substring(0, 40),
+            },
+          ],
+        });
+      } catch (err) { exitWithError(err, Boolean(opts.json || opts.output === "json")); }
     });
 
-  cmd
-    .command("get")
-    .description("Get category details")
-    .argument("<id>", "Category ID")
-    .option("--json", "Output as JSON")
-    .action(async (id, opts) => {
+  addGetOptions(
+    cmd
+      .command("get")
+      .description("Get category details (accepts numeric id or ref)")
+      .argument("<id-or-ref>", "Category ID or ref"),
+  )
+    .action(async (idOrRef, opts) => {
       try {
         const client = createClient();
-        const item = await client.get<Record<string, unknown>>(`categories/${id}`);
-        if (opts.json) { printJson(item); return; }
-        const rows: string[][] = [
-          ["ID", String(item.id ?? "")],
-          ["Label", String(item.label ?? "")],
-          ["Type", TYPE_MAP[String(item.type)] ?? String(item.type ?? "")],
-          ["Description", String(item.description ?? "")],
-          ["Color", String(item.color ?? "")],
-          ["Parent ID", String(item.fk_parent ?? "")],
-        ];
-        printTable(rows, ["Field", "Value"]);
-      } catch (err) { exitWithError(err, Boolean(opts.json)); }
+        const item = await client.getByRefOrId<Record<string, unknown>>("categories", idOrRef);
+        renderGet(item, {
+          opts,
+          fields: [
+            { key: "id", label: "ID" },
+            { key: "label", label: "Label" },
+            {
+              key: "type",
+              label: "Type",
+              format: (i) => TYPE_MAP[String(i.type)] ?? String(i.type ?? ""),
+            },
+            { key: "description", label: "Description" },
+            { key: "color", label: "Color" },
+            { key: "fk_parent", label: "Parent ID" },
+          ],
+        });
+      } catch (err) { exitWithError(err, Boolean(opts.json || opts.output === "json")); }
     });
 
   cmd
@@ -144,13 +162,14 @@ export function createCategoriesCommand(): Command {
       } catch (err) { exitWithError(err, Boolean(opts.json)); }
     });
 
-  cmd
-    .command("objects")
-    .description("List objects in a category")
-    .argument("<id>", "Category ID")
-    .requiredOption("--type <type>", "Object type (customer, supplier, product, contact, member)")
-    .option("--json", "Output as JSON")
-    .option("--limit <n>", "Results per page", "50")
+  addGetOptions(
+    cmd
+      .command("objects")
+      .description("List objects in a category")
+      .argument("<id>", "Category ID")
+      .requiredOption("--type <type>", "Object type (customer, supplier, product, contact, member)")
+      .option("--limit <n>", "Results per page", "50"),
+  )
     .action(async (id, opts) => {
       try {
         const client = createClient();
@@ -158,13 +177,18 @@ export function createCategoriesCommand(): Command {
           type: opts.type,
           limit: opts.limit,
         });
-        if (opts.json) { printJson(items); return; }
-        const rows = items.map((i) => [
-          String(i.id ?? ""),
-          String(i.ref ?? i.name ?? i.label ?? i.lastname ?? ""),
-        ]);
-        printTable(rows, ["ID", "Name/Ref"]);
-      } catch (err) { exitWithError(err, Boolean(opts.json)); }
+        renderList(items, {
+          opts,
+          columns: [
+            { key: "id", label: "ID" },
+            {
+              key: "ref",
+              label: "Name/Ref",
+              format: (i) => String(i.ref ?? i.name ?? i.label ?? i.lastname ?? ""),
+            },
+          ],
+        });
+      } catch (err) { exitWithError(err, Boolean(opts.json || opts.output === "json")); }
     });
 
   return cmd;

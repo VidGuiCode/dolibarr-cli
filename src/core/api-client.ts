@@ -162,6 +162,21 @@ export class DolibarrApiClient {
     return res.json() as Promise<T>;
   }
 
+  /**
+   * Fetch a single record by numeric id OR by human ref. All-digit inputs are
+   * treated as ids and hit `GET /{resource}/{id}`; anything else is treated as
+   * a ref and hits `GET /{resource}/ref/{ref}`. Only call this for resources
+   * whose Dolibarr API exposes the `/ref/{ref}` endpoint (see Phase 1 reference
+   * docs — as of Dolibarr 20.x: invoices, orders, proposals, categories, projects).
+   */
+  async getByRefOrId<T>(resource: string, idOrRef: string): Promise<T> {
+    const trimmed = idOrRef.trim();
+    const path = /^\d+$/.test(trimmed)
+      ? `${resource}/${trimmed}`
+      : `${resource}/ref/${encodeURIComponent(trimmed)}`;
+    return this.get<T>(path);
+  }
+
   async post<T>(path: string, body?: unknown): Promise<T> {
     const res = await this.fetchWithRetry(path, {
       method: "POST",
