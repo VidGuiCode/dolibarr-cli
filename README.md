@@ -4,9 +4,17 @@ Unofficial CLI for [Dolibarr ERP](https://www.dolibarr.org) — full REST API co
 
 ## Install
 
+Requires Node.js 20+ and npm.
+
 ```bash
 npm install -g https://github.com/VidGuiCode/dolibarr-cli/releases/download/v0.2.3/dolibarr-cli-0.2.3.tgz
+dolibarr --version
+dolibarr config init
 ```
+
+This installs the `dolibarr` command as a normal npm global CLI. It does not require `sudo`, does not install a system service, and does not modify system configuration.
+
+On Linux and macOS, avoid `sudo npm install -g` for this CLI. If npm global installs fail with permission errors, use a user-level Node.js setup such as [`nvm`](https://github.com/nvm-sh/nvm) or [`fnm`](https://github.com/Schniz/fnm), or configure npm's global prefix to a user-owned directory.
 
 Or for development:
 
@@ -42,7 +50,16 @@ dolibarr config init
 
 Enter your Dolibarr instance URL and API key. The CLI tests the connection before saving.
 
-Your API key is stored at `~/.config/dolibarr-cli/config.json`.
+Your API key is stored at `~/.config/dolibarr-cli/config.json`. Treat this file as a secret and do not share or commit it.
+
+For CI, containers, or scripts where you do not want a saved config file, set both environment variables instead:
+
+```bash
+export DOLIBARR_URL="https://your-dolibarr-instance"
+export DOLIBARR_API_KEY="your-api-key"
+```
+
+Environment variables are supplied by your shell, CI system, or container runtime. The CLI reads them but does not create an `.env` file.
 
 > **Getting an API key:** In Dolibarr, go to *Users & Groups > [your user] > API* tab > Generate key. Or ask your admin to create a dedicated API user.
 
