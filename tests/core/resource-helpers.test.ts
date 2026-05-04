@@ -14,8 +14,11 @@ import {
 } from "../../src/core/resource-helpers.js";
 
 describe("resource-helpers", () => {
+  const origArgv = process.argv;
+
   beforeEach(() => {
     vi.restoreAllMocks();
+    process.argv = origArgv;
   });
 
   describe("prunePayload", () => {
@@ -111,6 +114,26 @@ describe("resource-helpers", () => {
 
     it("treats --json as alias for --output json", () => {
       expect(resolveOutput({ json: true })).toBe("json");
+    });
+
+    it("treats --compact as compact JSON when no output format is specified", () => {
+      process.argv = ["node", "dolibarr", "bank", "list", "--compact"];
+
+      expect(resolveOutput({ output: "table" })).toBe("json");
+    });
+
+    it("keeps an explicit --output table choice even with --compact", () => {
+      process.argv = [
+        "node",
+        "dolibarr",
+        "bank",
+        "list",
+        "--compact",
+        "--output",
+        "table",
+      ];
+
+      expect(resolveOutput({ output: "table" })).toBe("table");
     });
 
     it("prefers --output csv over --json for explicit csv choice", () => {

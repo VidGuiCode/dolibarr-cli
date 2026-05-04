@@ -1,7 +1,7 @@
 import type { Command } from "commander";
 import { ask } from "./prompt.js";
 import { printCsv, printInfo, printJson, printTable } from "./output.js";
-import { isDryRunEnabled } from "./runtime.js";
+import { hasOption, isCompactMode, isDryRunEnabled } from "./runtime.js";
 import type { OutputFormat } from "./types.js";
 
 /**
@@ -76,6 +76,7 @@ export function resolveOutput(opts: Record<string, unknown>): OutputFormat {
   const raw = opts.output as string | undefined;
   if (raw === "json" || raw === "csv") return raw;
   if (opts.json) return "json";
+  if (isCompactMode() && !hasOption("--output")) return "json";
   if (raw === "table" || raw === undefined) return "table";
   return "table";
 }

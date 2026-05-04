@@ -1,5 +1,17 @@
 # Changelog
 
+## 0.2.4 - 2026-05-05
+
+### Fixed
+
+- **`dolibarr bank list --compact`** now emits compact JSON when no explicit `--output` is provided. Previously `--compact` only controlled JSON indentation, so the command still rendered the default table output.
+- **Bank account field mapping** now uses Dolibarr's current API fields (`account_number`, `iban_prefix`, `balance`) while keeping fallbacks for older aliases (`number`, `iban`, `solde`). `bank create --number/--iban` now sends `account_number` and `iban_prefix`.
+- **README bank examples** now use the actual shipped subcommands: `dolibarr bank list` and `dolibarr bank transactions <account-id>`.
+
+### Tests
+
+- Added bank command regression tests and compact JSON output coverage. Test total: 157 -> 164.
+
 ## 0.2.3 — 2026-04-17
 
 ### Added
@@ -96,7 +108,7 @@
 
 ### Fixed
 
-- Removed hardcoded personal default URL (`https://finance.cylro.com`) from `dolibarr config init` prompt. The prompt now shows a generic placeholder (`https://erp.example.com`) and requires the user to enter their own URL. This value should never have shipped as a default in an open-source tool.
+- Removed a hardcoded personal default URL from `dolibarr config init`. The prompt now shows a generic placeholder (`https://erp.example.com`) and requires the user to enter their own URL. This value should never have shipped as a default in an open-source tool.
 - `npm run clean` now works cross-platform. It previously only ran on Windows (PowerShell); it now uses a Node one-liner that works on macOS, Linux, and Windows.
 
 ### Docs

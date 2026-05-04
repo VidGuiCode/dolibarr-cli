@@ -7,7 +7,7 @@ Unofficial CLI for [Dolibarr ERP](https://www.dolibarr.org) — full REST API co
 Requires Node.js 20+ and npm.
 
 ```bash
-npm install -g https://github.com/VidGuiCode/dolibarr-cli/releases/download/v0.2.3/dolibarr-cli-0.2.3.tgz
+npm install -g https://github.com/VidGuiCode/dolibarr-cli/releases/download/v0.2.4/dolibarr-cli-0.2.4.tgz
 dolibarr --version
 dolibarr config init
 ```
@@ -88,8 +88,8 @@ dolibarr supplier-invoices list --supplier 3
 dolibarr supplier-invoices get 7
 
 # Bank
-dolibarr bank accounts list
-dolibarr bank transactions list --account 1 --from 2025-01-01
+dolibarr bank list
+dolibarr bank transactions 1
 
 # Accounting
 dolibarr accounting ledger list --account 6132

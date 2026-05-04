@@ -2,8 +2,11 @@ import { describe, it, expect, vi, beforeEach } from "vitest";
 import { printTable, printJson, printInfo, printError, printCsv } from "../../src/core/output.js";
 
 describe("output", () => {
+  const origArgv = process.argv;
+
   beforeEach(() => {
     vi.restoreAllMocks();
+    process.argv = origArgv;
   });
 
   describe("printTable", () => {
@@ -81,6 +84,15 @@ describe("output", () => {
 
       const output = logSpy.mock.calls[0][0] as string;
       expect(JSON.parse(output)).toEqual([{ id: 1 }, { id: 2 }]);
+    });
+
+    it("prints compact JSON when --compact is present", () => {
+      process.argv = ["node", "dolibarr", "bank", "list", "--compact"];
+      const logSpy = vi.spyOn(console, "log").mockImplementation(() => {});
+
+      printJson({ id: 1, name: "Test" });
+
+      expect(logSpy.mock.calls[0][0]).toBe('{"id":1,"name":"Test"}');
     });
   });
 

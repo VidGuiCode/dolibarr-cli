@@ -6,10 +6,50 @@ import {
   addGetOptions,
   addListOptions,
   buildListQuery,
+  type ColumnSpec,
   dryRunJson,
   renderGet,
   renderList,
 } from "../core/resource-helpers.js";
+
+export const bankAccountColumns: ColumnSpec[] = [
+  { key: "id", label: "ID" },
+  { key: "label", label: "Label" },
+  {
+    key: "account_number",
+    label: "Number",
+    format: (i) => String(i.account_number ?? i.number ?? ""),
+  },
+  {
+    key: "balance",
+    label: "Balance",
+    format: (i) => String(i.balance ?? i.solde ?? ""),
+  },
+  { key: "currency_code", label: "Currency" },
+];
+
+export const bankAccountFields: ColumnSpec[] = [
+  { key: "id", label: "ID" },
+  { key: "label", label: "Label" },
+  {
+    key: "account_number",
+    label: "Number",
+    format: (i) => String(i.account_number ?? i.number ?? ""),
+  },
+  {
+    key: "iban_prefix",
+    label: "IBAN",
+    format: (i) => String(i.iban_prefix ?? i.iban ?? ""),
+  },
+  { key: "bic", label: "BIC" },
+  {
+    key: "balance",
+    label: "Balance",
+    format: (i) => String(i.balance ?? i.solde ?? ""),
+  },
+  { key: "currency_code", label: "Currency" },
+  { key: "status", label: "Status" },
+];
 
 export function createBankCommand(): Command {
   const cmd = new Command("bank").description("Manage bank accounts and transactions");
@@ -28,17 +68,7 @@ export function createBankCommand(): Command {
         );
         renderList(items, {
           opts,
-          columns: [
-            { key: "id", label: "ID" },
-            { key: "label", label: "Label" },
-            { key: "number", label: "Number" },
-            {
-              key: "solde",
-              label: "Balance",
-              format: (i) => String(i.solde ?? i.balance ?? ""),
-            },
-            { key: "currency_code", label: "Currency" },
-          ],
+          columns: bankAccountColumns,
         });
       } catch (err) { exitWithError(err, Boolean(opts.json || opts.output === "json")); }
     });
@@ -55,20 +85,7 @@ export function createBankCommand(): Command {
         const item = await client.get<Record<string, unknown>>(`bankaccounts/${id}`);
         renderGet(item, {
           opts,
-          fields: [
-            { key: "id", label: "ID" },
-            { key: "label", label: "Label" },
-            { key: "number", label: "Number" },
-            { key: "iban", label: "IBAN" },
-            { key: "bic", label: "BIC" },
-            {
-              key: "solde",
-              label: "Balance",
-              format: (i) => String(i.solde ?? i.balance ?? ""),
-            },
-            { key: "currency_code", label: "Currency" },
-            { key: "status", label: "Status" },
-          ],
+          fields: bankAccountFields,
         });
       } catch (err) { exitWithError(err, Boolean(opts.json || opts.output === "json")); }
     });
@@ -85,8 +102,8 @@ export function createBankCommand(): Command {
     .action(async (opts) => {
       try {
         const body: Record<string, unknown> = { label: opts.label };
-        if (opts.number) body.number = opts.number;
-        if (opts.iban) body.iban = opts.iban;
+        if (opts.number) body.account_number = opts.number;
+        if (opts.iban) body.iban_prefix = opts.iban;
         if (opts.bic) body.bic = opts.bic;
         if (opts.currency) body.currency_code = opts.currency;
         if (dryRunJson("bank.create", { body })) return;
