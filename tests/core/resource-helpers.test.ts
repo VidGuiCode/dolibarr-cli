@@ -116,22 +116,8 @@ describe("resource-helpers", () => {
       expect(resolveOutput({ json: true })).toBe("json");
     });
 
-    it("treats --compact as compact JSON when no output format is specified", () => {
+    it("keeps default table output when --compact is specified without JSON output", () => {
       process.argv = ["node", "dolibarr", "bank", "list", "--compact"];
-
-      expect(resolveOutput({ output: "table" })).toBe("json");
-    });
-
-    it("keeps an explicit --output table choice even with --compact", () => {
-      process.argv = [
-        "node",
-        "dolibarr",
-        "bank",
-        "list",
-        "--compact",
-        "--output",
-        "table",
-      ];
 
       expect(resolveOutput({ output: "table" })).toBe("table");
     });

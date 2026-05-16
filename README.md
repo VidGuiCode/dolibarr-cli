@@ -7,12 +7,14 @@ Unofficial CLI for [Dolibarr ERP](https://www.dolibarr.org) — full REST API co
 Requires Node.js 20+ and npm.
 
 ```bash
-npm install -g https://github.com/VidGuiCode/dolibarr-cli/releases/download/v0.2.4/dolibarr-cli-0.2.4.tgz
+npm install -g https://github.com/VidGuiCode/dolibarr-cli/releases/download/v0.2.5/dolibarr-cli-0.2.5.tgz
 dolibarr --version
 dolibarr config init
 ```
 
 This installs the `dolibarr` command as a normal npm global CLI. It does not require `sudo`, does not install a system service, and does not modify system configuration.
+
+On Windows PowerShell, `dolibarr` may resolve to npm's `.ps1` shim and be blocked by the execution policy. Use `dolibarr.cmd` from PowerShell, or run `dolibarr` from `cmd.exe` / a shell that resolves the `.cmd` shim.
 
 On Linux and macOS, avoid `sudo npm install -g` for this CLI. If npm global installs fail with permission errors, use a user-level Node.js setup such as [`nvm`](https://github.com/nvm-sh/nvm) or [`fnm`](https://github.com/Schniz/fnm), or configure npm's global prefix to a user-owned directory.
 
@@ -76,39 +78,37 @@ dolibarr thirdparties get 5
 dolibarr thirdparties create --name "Acme Corp" --supplier --dry-run
 
 # Customer invoices
-dolibarr invoices list --year 2025
-dolibarr invoices list --status paid --output json
+dolibarr invoices list --status 2 --output json
 dolibarr invoices get 12
-dolibarr invoices get FA2501-0001            # look up by ref (invoices, orders, proposals, categories)
+dolibarr invoices get FA2501-0001            # look up by ref
 dolibarr invoices validate 12
 dolibarr invoices pay 12 --amount 500.00 --date 2025-12-01
 
 # Supplier invoices
-dolibarr supplier-invoices list --supplier 3
+dolibarr supplier-invoices list --thirdparty 3
 dolibarr supplier-invoices get 7
 
 # Bank
 dolibarr bank list
 dolibarr bank transactions 1
+dolibarr bank transfer --from 1 --to 2 --amount 100.00 --date 2026-05-05 --description "Internal transfer"
 
 # Accounting
-dolibarr accounting ledger list --account 6132
-dolibarr accounting balance
-dolibarr accounting transfer --source supplier_invoices
+dolibarr accounting ledger --period currentyear --format CSV
 
 # Products
 dolibarr products list --type service
 dolibarr products create --label "Consulting" --price 150.00 --type service
 
 # Documents
-dolibarr documents list --module invoice --id 5
-dolibarr documents upload --module invoice --id 5 ./scan.pdf
-dolibarr documents download --module invoice --id 5 --file scan.pdf
+dolibarr documents list --module facture --ref FA2501-0001
+dolibarr documents upload --module facture --ref FA2501-0001 --file ./scan.pdf
+dolibarr documents download --module facture --file invoices/FA2501-0001/scan.pdf --output scan.pdf
 
 # Setup
-dolibarr setup modules list
-dolibarr setup modules enable accounting
-dolibarr setup company show
+dolibarr setup modules
+dolibarr setup company
+dolibarr setup conf MAIN_INFO_SOCIETE_NOM
 
 # Projects
 dolibarr projects list --status 1
@@ -147,6 +147,12 @@ dolibarr invoices list --json              # JSON (shorthand)
 dolibarr invoices list --output csv        # CSV (RFC 4180, raw field keys as headers)
 ```
 
+`--compact` only changes JSON indentation. It does not select JSON output by itself; use `--json --compact` or `--output json --compact`.
+
+### Bank balances
+
+`dolibarr bank list` shows bank account metadata. Dolibarr's account-object `balance` / `solde` fields may be stale or zero on some server versions, so they are not shown in the default list table. For reconciliation, use `dolibarr bank transactions <account-id>` or raw `/bankaccounts/{id}/lines` output and sum transaction lines independently.
+
 ### Column projection with `--fields`
 
 Pick exactly the columns you want, using the raw Dolibarr field keys. Works across all three output formats.
@@ -161,12 +167,15 @@ With `--fields`, values pass through raw — e.g. `--fields status` emits the nu
 
 ### Ref-based lookup
 
-`get` accepts a human ref in place of a numeric id for resources whose Dolibarr API exposes `/ref/{ref}` — **invoices, orders, proposals, categories**. All-digit input is still treated as an id.
+`get` accepts a human ref in place of a numeric id for resources whose Dolibarr API exposes `/ref/{ref}` — **invoices, orders, proposals, categories, projects, and tickets**. All-digit input is still treated as an id. Tickets also support public track ID lookup via `--track-id`.
 
 ```bash
 dolibarr invoices get FA2501-0001
 dolibarr orders get CO2501-0042
 dolibarr proposals get PR2501-0007
+dolibarr projects get PJ2501-001
+dolibarr tickets get TICKET-001
+dolibarr tickets get --track-id abc123def456
 ```
 
 ## Dry Run
@@ -193,13 +202,13 @@ dolibarr thirdparties create --name "Test" --supplier --dry-run
 | `supplier-orders` | Purchase orders |
 | `proposals` | Quotes / commercial proposals |
 | `bank` | Bank accounts and transactions |
-| `accounting` | Ledger, journal entries, trial balance |
+| `accounting` | Accounting export data |
 | `products` | Products and services |
 | `contacts` | Contact persons |
 | `categories` | Tags and categories |
 | `documents` | File upload, download, listing |
 | `users` | User management |
-| `setup` | Modules, dictionaries, company config |
+| `setup` | Modules, company info, config constants |
 | `projects` | Projects and tasks |
 | `tickets` | Support / help desk tickets |
 | `contracts` | Service contracts + line activation |

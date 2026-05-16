@@ -1,5 +1,16 @@
 # Changelog
 
+## 0.2.5 - 2026-05-17
+
+### Fixed
+
+- **`--compact` output selection** now matches the CLI help again: it only controls JSON indentation and no longer switches default table output to raw JSON. Use `--json --compact` or `--output json --compact` for compact JSON.
+- **`dolibarr bank list` balance display** no longer shows Dolibarr's account-object `balance` / `solde` fields in the default table, because those fields can be stale or zero even when transaction lines exist. `bank get` labels the same API value as `Reported Balance` when shown.
+- **`dolibarr bank transfer --date`** now converts `YYYY-MM-DD` to a Unix timestamp before calling `/bankaccounts/transfer`, while still accepting an explicit Unix timestamp.
+- **Windows install guidance** now documents using `dolibarr.cmd` when PowerShell blocks npm's `.ps1` shim.
+- **README examples** now match the shipped command surface for accounting, setup, documents, invoice filters, supplier-invoice filters, and ref lookup.
+- **MIT license file** is now included in the repository and release package.
+
 ## 0.2.4 - 2026-05-05
 
 ### Fixed

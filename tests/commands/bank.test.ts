@@ -4,6 +4,7 @@ import {
   bankAccountColumns,
   bankAccountFields,
   createBankCommand,
+  parseBankTransferDate,
 } from "../../src/commands/bank.js";
 
 function sub(cmd: Command, name: string): Command | undefined {
@@ -27,29 +28,41 @@ describe("bank command", () => {
     expect(f).toContain("--fields");
   });
 
-  it("renders Dolibarr account_number / balance fields with legacy fallbacks", () => {
+  it("renders Dolibarr account_number fields with a legacy fallback", () => {
     const account = {
       id: 1,
       label: "Main",
       account_number: "ACC-1",
-      balance: 123.45,
       currency_code: "EUR",
     };
     const legacyAccount = {
       id: 2,
       label: "Legacy",
       number: "OLD-2",
-      solde: 67.89,
       currency_code: "EUR",
     };
 
     const numberColumn = bankAccountColumns.find((c) => c.key === "account_number")!;
-    const balanceColumn = bankAccountColumns.find((c) => c.key === "balance")!;
 
     expect(numberColumn.format?.(account)).toBe("ACC-1");
     expect(numberColumn.format?.(legacyAccount)).toBe("OLD-2");
-    expect(balanceColumn.format?.(account)).toBe("123.45");
-    expect(balanceColumn.format?.(legacyAccount)).toBe("67.89");
+  });
+
+  it("does not show stale account-object balances in the default list columns", () => {
+    expect(bankAccountColumns.map((c) => c.key)).toEqual([
+      "id",
+      "label",
+      "account_number",
+      "currency_code",
+    ]);
+  });
+
+  it("labels account-object balances as reported balances in details", () => {
+    const balanceField = bankAccountFields.find((c) => c.key === "balance")!;
+
+    expect(balanceField.label).toBe("Reported Balance");
+    expect(balanceField.format?.({ balance: 123.45 })).toBe("123.45");
+    expect(balanceField.format?.({ solde: 67.89 })).toBe("67.89");
   });
 
   it("renders iban_prefix with an iban fallback in account details", () => {
@@ -66,5 +79,18 @@ describe("bank command", () => {
     expect(f).toContain("--number");
     expect(f).toContain("--iban");
     expect(f).toContain("--currency");
+  });
+
+  it("converts transfer YYYY-MM-DD dates to Unix timestamps", () => {
+    expect(parseBankTransferDate("2026-05-05")).toBe(1777939200);
+  });
+
+  it("accepts transfer Unix timestamps directly", () => {
+    expect(parseBankTransferDate("1777939200")).toBe(1777939200);
+  });
+
+  it("rejects invalid transfer dates", () => {
+    expect(() => parseBankTransferDate("2026-02-30")).toThrow(/valid calendar date/);
+    expect(() => parseBankTransferDate("05/05/2026")).toThrow(/YYYY-MM-DD/);
   });
 });

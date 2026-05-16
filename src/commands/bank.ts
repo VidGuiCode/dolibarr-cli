@@ -20,11 +20,6 @@ export const bankAccountColumns: ColumnSpec[] = [
     label: "Number",
     format: (i) => String(i.account_number ?? i.number ?? ""),
   },
-  {
-    key: "balance",
-    label: "Balance",
-    format: (i) => String(i.balance ?? i.solde ?? ""),
-  },
   { key: "currency_code", label: "Currency" },
 ];
 
@@ -44,12 +39,36 @@ export const bankAccountFields: ColumnSpec[] = [
   { key: "bic", label: "BIC" },
   {
     key: "balance",
-    label: "Balance",
+    label: "Reported Balance",
     format: (i) => String(i.balance ?? i.solde ?? ""),
   },
   { key: "currency_code", label: "Currency" },
   { key: "status", label: "Status" },
 ];
+
+export function parseBankTransferDate(value: string): number {
+  const trimmed = value.trim();
+  if (/^\d+$/.test(trimmed)) return Number(trimmed);
+
+  const match = /^(\d{4})-(\d{2})-(\d{2})$/.exec(trimmed);
+  if (!match) {
+    throw new Error("Transfer date must be YYYY-MM-DD or a Unix timestamp.");
+  }
+
+  const year = Number(match[1]);
+  const month = Number(match[2]);
+  const day = Number(match[3]);
+  const date = new Date(Date.UTC(year, month - 1, day));
+  if (
+    date.getUTCFullYear() !== year ||
+    date.getUTCMonth() !== month - 1 ||
+    date.getUTCDate() !== day
+  ) {
+    throw new Error("Transfer date must be a valid calendar date.");
+  }
+
+  return Math.floor(date.getTime() / 1000);
+}
 
 export function createBankCommand(): Command {
   const cmd = new Command("bank").description("Manage bank accounts and transactions");
@@ -156,7 +175,7 @@ export function createBankCommand(): Command {
     .requiredOption("--from <id>", "Source bank account ID")
     .requiredOption("--to <id>", "Destination bank account ID")
     .requiredOption("--amount <n>", "Transfer amount")
-    .requiredOption("--date <date>", "Transfer date (YYYY-MM-DD)")
+    .requiredOption("--date <date>", "Transfer date (YYYY-MM-DD or Unix timestamp)")
     .requiredOption("--description <text>", "Transfer description")
     .action(async (opts) => {
       try {
@@ -164,7 +183,7 @@ export function createBankCommand(): Command {
           bankaccount_from_id: Number(opts.from),
           bankaccount_to_id: Number(opts.to),
           amount: Number(opts.amount),
-          date: opts.date,
+          date: parseBankTransferDate(opts.date),
           description: opts.description,
         };
         if (dryRunJson("bank.transfer", { body })) return;
