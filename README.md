@@ -7,7 +7,7 @@ Unofficial CLI for [Dolibarr ERP](https://www.dolibarr.org) — full REST API co
 Requires Node.js 20+ and npm.
 
 ```bash
-npm install -g https://github.com/VidGuiCode/dolibarr-cli/releases/download/v0.2.5/dolibarr-cli-0.2.5.tgz
+npm install -g https://github.com/VidGuiCode/dolibarr-cli/releases/download/v0.2.6/dolibarr-cli-0.2.6.tgz
 dolibarr --version
 dolibarr config init
 ```
@@ -57,7 +57,7 @@ Your API key is stored at `~/.config/dolibarr-cli/config.json`. Treat this file 
 For CI, containers, or scripts where you do not want a saved config file, set both environment variables instead:
 
 ```bash
-export DOLIBARR_URL="https://your-dolibarr-instance"
+export DOLIBARR_URL="https://your-dolibarr.example.com"
 export DOLIBARR_API_KEY="your-api-key"
 ```
 
@@ -151,7 +151,7 @@ dolibarr invoices list --output csv        # CSV (RFC 4180, raw field keys as he
 
 ### Bank balances
 
-`dolibarr bank list` shows bank account metadata. Dolibarr's account-object `balance` / `solde` fields may be stale or zero on some server versions, so they are not shown in the default list table. For reconciliation, use `dolibarr bank transactions <account-id>` or raw `/bankaccounts/{id}/lines` output and sum transaction lines independently.
+`dolibarr bank list` shows bank account metadata. Dolibarr's account-object `balance` / `solde` fields may be stale or zero on some server versions, so they are omitted from bank list table, JSON, and CSV output. For reconciliation, use `dolibarr bank transactions <account-id>` or raw `/bankaccounts/{id}/lines` output and sum transaction lines independently.
 
 ### Column projection with `--fields`
 

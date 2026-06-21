@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.2.6 - 2026-06-21
+
+### Fixed
+
+- **`dolibarr bank list` machine-readable balances** now omits Dolibarr's account-object `balance` / `solde` fields from JSON and CSV output too, because those fields can be stale or zero even when transaction lines exist. This matches the v0.2.5 default table behavior.
+
 ## 0.2.5 - 2026-05-17
 
 ### Fixed

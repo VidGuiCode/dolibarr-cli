@@ -46,6 +46,15 @@ export const bankAccountFields: ColumnSpec[] = [
   { key: "status", label: "Status" },
 ];
 
+export function sanitizeBankAccountListItem(
+  item: Record<string, unknown>,
+): Record<string, unknown> {
+  const safeItem = { ...item };
+  delete safeItem.balance;
+  delete safeItem.solde;
+  return safeItem;
+}
+
 export function parseBankTransferDate(value: string): number {
   const trimmed = value.trim();
   if (/^\d+$/.test(trimmed)) return Number(trimmed);
@@ -85,7 +94,7 @@ export function createBankCommand(): Command {
           "bankaccounts",
           buildListQuery(opts),
         );
-        renderList(items, {
+        renderList(items.map(sanitizeBankAccountListItem), {
           opts,
           columns: bankAccountColumns,
         });

@@ -5,6 +5,7 @@ import {
   bankAccountFields,
   createBankCommand,
   parseBankTransferDate,
+  sanitizeBankAccountListItem,
 } from "../../src/commands/bank.js";
 
 function sub(cmd: Command, name: string): Command | undefined {
@@ -55,6 +56,22 @@ describe("bank command", () => {
       "account_number",
       "currency_code",
     ]);
+  });
+
+  it("removes stale account-object balances from list output items", () => {
+    expect(
+      sanitizeBankAccountListItem({
+        id: 1,
+        label: "Main",
+        balance: 0,
+        solde: 0,
+        currency_code: "EUR",
+      }),
+    ).toEqual({
+      id: 1,
+      label: "Main",
+      currency_code: "EUR",
+    });
   });
 
   it("labels account-object balances as reported balances in details", () => {
