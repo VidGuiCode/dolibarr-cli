@@ -209,6 +209,16 @@ dolibarr supplier-proposals list --thirdparty 8
 dolibarr supplier-proposals create --socid 8 --date 2026-02-01 --ref-supplier SUP-77
 dolibarr supplier-proposals lines 4
 
+# Tasks & time spent
+dolibarr tasks list --project 3 --with-timespent
+dolibarr tasks create --ref T1 --label "Design" --project 3 --workload-hours 3
+# Time spent wants a datetime; pass a plain date and the CLI converts it:
+dolibarr tasks timespent add 9 --date 2026-03-01 --hours 1.5
+
+# Agenda (calendar events)
+dolibarr agenda list --user 2
+dolibarr agenda create --label "Client call" --start 2026-04-01 --type AC_RDV
+
 # Raw API (escape hatch)
 dolibarr raw GET /thirdparties
 dolibarr raw POST /invoices --data '{"socid": 1}'
@@ -318,6 +328,8 @@ dolibarr thirdparties create --name "Test" --supplier --dry-run
 | `members` | Members, subscriptions, member types |
 | `stock` | Warehouses + stock movement ledger |
 | `supplier-proposals` | Supplier price requests |
+| `tasks` | Project tasks + time spent |
+| `agenda` | Calendar / agenda events |
 
 ## Development
 

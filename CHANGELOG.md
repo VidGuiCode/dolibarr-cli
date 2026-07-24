@@ -1,5 +1,63 @@
 # Changelog
 
+## 0.4.5 - 2026-07-25
+
+New resource groups — line 0.4.x, part 6: **`tasks`** + **`agenda`**.
+
+> ✅ **`tasks` is live-verified** — the Project module is enabled and the API user has task
+> rights, so every route, field name and the time-spent date format below were exercised
+> against a real Dolibarr 20.0.4 (throwaway project + task + time entry, all deleted).
+> ⚠️ **`agenda` is module-gated** — `/agendaevents` returns `403 "Insufficient rights to read
+> an event"`. Its routes are confirmed; the bodies are docs-sourced and not exercised.
+
+### Added
+
+- **`tasks`** command group (`/tasks`) — tasks as a top-level resource:
+  - `list` — `--project` filter, `--with-timespent`, plus the shared list flags. Workload
+    and time spent render as `3h` / `1h 30m`.
+  - `get <id>` — detail view, `--with-timespent` supported.
+  - `create --ref --label --project` (all three mandatory) plus `--description --parent
+    --date-start --date-end --workload-hours|--workload --progress --priority
+    --note-public --note-private`, or `--from-json`. Echoes the created object.
+  - `update <id>` — same field flags; only what you pass is sent. Echoes the result.
+  - `delete <id>` — confirmation prompt or `--confirm`.
+  - `roles <id>` — user roles assigned on a task (`--user` to narrow).
+  - `timespent add <id> --date [--hours|--duration --user --note]`,
+    `timespent update <id> <line-id> …`, `timespent delete <id> <line-id> --confirm`.
+- **`agenda`** command group (`/agendaevents`) — calendar events with full CRUD
+  (`list --user --thirdparty`, `get`, `create --label --start …`, `update`, `delete`).
+
+### Field/route quirks found live (tasks)
+
+- **Time spent takes a `YYYY-MM-DD HH:MM:SS` *string*, not an epoch.** Passing an epoch is
+  rejected outright ("Expecting date and time in `YYYY-MM-DD HH:MM:SS` format") — the only
+  date field in the API that behaves this way. A new `toDateTimeString()` helper in
+  `src/core/dates.ts` converts whatever you pass, so `--date 2026-03-01` just works.
+- **`ref`, `label` and `fk_project` are all mandatory** on a task create — a task cannot
+  exist outside a project.
+- **`fk_statut` is silently ignored on `PUT /tasks/{id}`** (verified: the stored status did
+  not change), so no status flag is exposed. Everything else persisted: `label`, `ref`,
+  `description`, `date_start`, `date_end`, `planned_workload`, `progress`, `priority`,
+  `fk_task_parent`, `note_public`, `note_private`.
+- **Time spent is added at `/tasks/{id}/addtimespent`.** `GET` and `POST` on
+  `/tasks/{id}/timespent` are route-stage 404s — only `PUT`/`DELETE` on
+  `/timespent/{lineid}` exist — so there is no `timespent list`; read totals via
+  `get --with-timespent`.
+- **A task with time-spent lines cannot be deleted** (`ErrorRecordHasChildren`). The
+  `delete --help` says so and points at `timespent delete`.
+- **No `/tasks/ref/{ref}`** route, so `get` takes a numeric ID.
+
+### Relationship to `projects`
+
+`projects tasks <project-id>` (shipped earlier) stays the project-scoped listing. The new
+group is the task resource itself — get/create/update/delete/roles/timespent — and the two
+cross-link in their help text.
+
+### Tests
+
+- Added tasks + agenda command-tree, body-builder and column tests, plus `toDateTimeString`
+  unit tests. Test total: 352 → 385.
+
 ## 0.4.4 - 2026-07-25
 
 New resource groups — line 0.4.x, part 5: **`supplier-proposals`**.

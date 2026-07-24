@@ -1,6 +1,36 @@
 import { describe, it, expect } from "vitest";
-import { toEpochSeconds, normalizeDateFields } from "../../src/core/dates.js";
+import { toEpochSeconds, toDateTimeString, normalizeDateFields } from "../../src/core/dates.js";
 import { ValidationError } from "../../src/core/errors.js";
+
+describe("toDateTimeString", () => {
+  it("expands a bare YYYY-MM-DD to midnight", () => {
+    expect(toDateTimeString("2026-01-15")).toBe("2026-01-15 00:00:00");
+  });
+
+  it("keeps an explicit time and fills in missing seconds", () => {
+    expect(toDateTimeString("2026-01-15 09:30")).toBe("2026-01-15 09:30:00");
+    expect(toDateTimeString("2026-01-15 09:30:15")).toBe("2026-01-15 09:30:15");
+  });
+
+  it("accepts a T separator", () => {
+    expect(toDateTimeString("2026-01-15T09:30:00")).toBe("2026-01-15 09:30:00");
+  });
+
+  it("renders an epoch (string or number) in UTC", () => {
+    const epoch = Date.UTC(2026, 0, 15, 9, 30, 15) / 1000;
+    expect(toDateTimeString(epoch)).toBe("2026-01-15 09:30:15");
+    expect(toDateTimeString(String(epoch))).toBe("2026-01-15 09:30:15");
+  });
+
+  it("round-trips with toEpochSeconds for a bare date", () => {
+    expect(toDateTimeString(toEpochSeconds("2026-01-15"))).toBe("2026-01-15 00:00:00");
+  });
+
+  it("rejects an empty or unparseable value", () => {
+    expect(() => toDateTimeString("")).toThrow(ValidationError);
+    expect(() => toDateTimeString("not a date")).toThrow(ValidationError);
+  });
+});
 
 describe("toEpochSeconds", () => {
   it("converts YYYY-MM-DD to UTC-midnight epoch seconds", () => {

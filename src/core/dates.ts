@@ -39,6 +39,42 @@ export function toEpochSeconds(input: string | number): number {
 }
 
 /**
+ * Convert a human date/time to the `YYYY-MM-DD HH:MM:SS` string a few Dolibarr
+ * endpoints demand instead of an epoch — notably `POST /tasks/{id}/addtimespent`
+ * and `PUT /tasks/{id}/timespent/{lineid}`, which reject an epoch outright
+ * ("Expecting date and time in `YYYY-MM-DD HH:MM:SS` format").
+ *
+ * Accepts:
+ *  - `YYYY-MM-DD` (midnight is assumed)
+ *  - `YYYY-MM-DD HH:MM` / `YYYY-MM-DD HH:MM:SS` (passed through, seconds filled in)
+ *  - a Unix epoch in seconds, or any `Date.parse`-able string
+ *
+ * The result is always rendered in UTC so it round-trips with `toEpochSeconds`.
+ */
+export function toDateTimeString(input: string | number): string {
+  const render = (ms: number): string =>
+    new Date(ms).toISOString().replace("T", " ").slice(0, 19);
+
+  if (typeof input === "number") {
+    if (!Number.isFinite(input)) throw new ValidationError(`Invalid date: ${input}`);
+    return render(Math.floor(input) * 1000);
+  }
+
+  const trimmed = input.trim();
+  if (trimmed === "") throw new ValidationError("Empty date value.");
+
+  // Already in the wanted shape — normalize the seconds part only.
+  const dt = trimmed.match(/^(\d{4}-\d{2}-\d{2})[ T](\d{2}):(\d{2})(?::(\d{2}))?$/);
+  if (dt) return `${dt[1]} ${dt[2]}:${dt[3]}:${dt[4] ?? "00"}`;
+
+  const ymd = trimmed.match(/^\d{4}-\d{2}-\d{2}$/);
+  if (ymd) return `${trimmed} 00:00:00`;
+
+  // Anything else (epoch string, RFC date, …) goes through toEpochSeconds.
+  return render(toEpochSeconds(trimmed) * 1000);
+}
+
+/**
  * Convert the named body fields from a human date (YYYY-MM-DD) to Unix epoch
  * seconds in place. Absent, null, or empty-string fields are left untouched.
  * Mutates and returns the body.
