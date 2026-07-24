@@ -2,11 +2,12 @@ import * as fs from "node:fs";
 import { Command } from "commander";
 import { createClient } from "../core/config-store.js";
 import { printInfo, printJson } from "../core/output.js";
-import { exitWithError } from "../core/errors.js";
+import { DolibarrApiError, exitWithError } from "../core/errors.js";
 import {
   addGetOptions,
   addListOptions,
   buildListQuery,
+  type ColumnSpec,
   confirmOrCancel,
   dryRunJson,
   prunePayload,
@@ -20,6 +21,55 @@ function thirdpartyType(item: Record<string, unknown>): string {
   if (Number(item.client) === 2 || Number(item.client) === 3) parts.push("Prospect");
   if (Number(item.fournisseur) === 1) parts.push("Supplier");
   return parts.join(", ") || "-";
+}
+
+/**
+ * Build a thirdparty (company) bank-account body from parsed opts, shared by the
+ * bank-accounts create/update actions. Covers the standard RIB fields and the SEPA
+ * mandate fields. Only passed flags become keys.
+ */
+export function buildThirdpartyBankAccountBody(
+  opts: Record<string, unknown>,
+): Record<string, unknown> {
+  const body: Record<string, unknown> = {};
+  if (opts.label !== undefined) body.label = opts.label;
+  if (opts.bankName !== undefined) body.bank = opts.bankName;
+  if (opts.iban !== undefined) body.iban = opts.iban;
+  if (opts.bic !== undefined) body.bic = opts.bic;
+  if (opts.codeBanque !== undefined) body.code_banque = opts.codeBanque;
+  if (opts.codeGuichet !== undefined) body.code_guichet = opts.codeGuichet;
+  if (opts.number !== undefined) body.number = opts.number;
+  if (opts.cleRib !== undefined) body.cle_rib = opts.cleRib;
+  if (opts.owner !== undefined) body.proprio = opts.owner;
+  if (opts.ownerAddress !== undefined) body.owner_address = opts.ownerAddress;
+  if (opts.rum !== undefined) body.rum = opts.rum;
+  if (opts.currency !== undefined) body.currency_code = opts.currency;
+  return body;
+}
+
+export const thirdpartyBankAccountColumns: ColumnSpec[] = [
+  { key: "id", label: "ID" },
+  { key: "label", label: "Label" },
+  { key: "bank", label: "Bank" },
+  { key: "iban", label: "IBAN", format: (i) => String(i.iban ?? i.iban_prefix ?? "") },
+  { key: "bic", label: "BIC" },
+  { key: "default_rib", label: "Default" },
+];
+
+/**
+ * Map the `--type`/`--mode` options of `thirdparties outstanding` to the Dolibarr
+ * sub-resource path. `mode=supplier` reads supplier-side outstanding amounts.
+ */
+export function outstandingPath(id: string, opts: Record<string, unknown>): string {
+  const type = (opts.type as string) ?? "invoices";
+  const resource =
+    type === "orders"
+      ? "outstandingorders"
+      : type === "proposals"
+        ? "outstandingproposals"
+        : "outstandinginvoices";
+  const mode = opts.mode === "supplier" ? "?mode=supplier" : "";
+  return `thirdparties/${id}/${resource}${mode}`;
 }
 
 export function createThirdpartiesCommand(): Command {
@@ -193,12 +243,20 @@ export function createThirdpartiesCommand(): Command {
 
   cmd
     .command("merge")
-    .description("Merge a thirdparty into another")
+    .description("Merge a thirdparty into another (the source is permanently deleted)")
     .argument("<id>", "Target thirdparty ID (kept)")
     .argument("<id-to-delete>", "Source thirdparty ID (merged and deleted)")
+    .option("--confirm", "Skip confirmation prompt")
     .option("--json", "Output as JSON")
     .action(async (id, idToDelete, opts) => {
       try {
+        if (
+          !(await confirmOrCancel(
+            `Merge thirdparty ${idToDelete} into ${id}? The source ${idToDelete} is permanently deleted.`,
+            opts,
+          ))
+        )
+          return;
         if (dryRunJson("thirdparties.merge", { id, idToDelete })) return;
 
         const client = createClient();
@@ -208,5 +266,214 @@ export function createThirdpartiesCommand(): Command {
       } catch (err) { exitWithError(err, Boolean(opts.json)); }
     });
 
+  cmd.addCommand(createThirdpartyBankAccountsCommand());
+  cmd.addCommand(createThirdpartyGatewaysCommand());
+
+  addGetOptions(
+    cmd
+      .command("outstanding")
+      .description("Show outstanding (unpaid) amounts for a thirdparty")
+      .argument("<id>", "Thirdparty ID"),
+  )
+    .option("--type <type>", "invoices | orders | proposals", "invoices")
+    .option("--mode <mode>", "customer | supplier (supplier reads purchase-side)", "customer")
+    .action(async (id, opts) => {
+      try {
+        const client = createClient();
+        const result = await client.get<Record<string, unknown>>(outstandingPath(id, opts));
+        printJson(result);
+      } catch (err) { exitWithError(err, Boolean(opts.json || opts.output === "json")); }
+    });
+
   return cmd;
+}
+
+/** `thirdparties bank-accounts` — company (RIB/SEPA) bank accounts CRUD. */
+function createThirdpartyBankAccountsCommand(): Command {
+  const grp = new Command("bank-accounts").description(
+    "Manage a thirdparty's bank accounts (RIB / IBAN / SEPA)",
+  );
+
+  addListOptions(
+    grp
+      .command("list")
+      .description("List a thirdparty's bank accounts")
+      .argument("<id>", "Thirdparty ID"),
+  ).action(async (id, opts) => {
+    try {
+      const client = createClient();
+      let items: Record<string, unknown>[] = [];
+      try {
+        items = await client.get<Record<string, unknown>[]>(`thirdparties/${id}/bankaccounts`);
+      } catch (err) {
+        // Dolibarr returns 404 when the thirdparty simply has no bank accounts.
+        if (!(err instanceof DolibarrApiError && err.status === 404)) throw err;
+      }
+      renderList(items, { opts, columns: thirdpartyBankAccountColumns });
+    } catch (err) { exitWithError(err, Boolean(opts.json || opts.output === "json")); }
+  });
+
+  const withBankFlags = (c: Command): Command =>
+    c
+      .option("--bank-name <name>", "Bank name")
+      .option("--iban <iban>", "IBAN")
+      .option("--bic <bic>", "BIC/SWIFT")
+      .option("--code-banque <code>", "Bank code")
+      .option("--code-guichet <code>", "Branch/desk code")
+      .option("--number <num>", "Account number")
+      .option("--cle-rib <key>", "RIB key")
+      .option("--owner <name>", "Account owner (proprio)")
+      .option("--owner-address <text>", "Owner address")
+      .option("--rum <mandate>", "SEPA mandate reference (RUM)")
+      .option("--currency <code>", "Currency code");
+
+  withBankFlags(
+    grp
+      .command("create")
+      .description("Add a bank account to a thirdparty")
+      .argument("<id>", "Thirdparty ID")
+      .requiredOption("--label <label>", "Account label")
+      .option("--json", "Output as JSON"),
+  ).action(async (id, opts) => {
+    try {
+      const body = buildThirdpartyBankAccountBody(opts);
+      if (dryRunJson("thirdparties.bankAccounts.create", { id, body })) return;
+      const client = createClient();
+      const result = await client.post<unknown>(`thirdparties/${id}/bankaccounts`, body);
+      if (opts.json) { printJson(result); return; }
+      printInfo(`Added bank account to thirdparty ${id}.`);
+    } catch (err) { exitWithError(err, Boolean(opts.json)); }
+  });
+
+  withBankFlags(
+    grp
+      .command("update")
+      .description("Update a thirdparty bank account")
+      .argument("<id>", "Thirdparty ID")
+      .argument("<bank-id>", "Bank account ID")
+      .option("--label <label>", "Account label")
+      .option("--json", "Output as JSON"),
+  ).action(async (id, bankId, opts) => {
+    try {
+      const body = buildThirdpartyBankAccountBody(opts);
+      if (dryRunJson("thirdparties.bankAccounts.update", { id, bankId, body })) return;
+      const client = createClient();
+      const result = await client.put<unknown>(
+        `thirdparties/${id}/bankaccounts/${bankId}`,
+        body,
+      );
+      if (opts.json) { printJson(result); return; }
+      printInfo(`Updated bank account ${bankId} on thirdparty ${id}.`);
+    } catch (err) { exitWithError(err, Boolean(opts.json)); }
+  });
+
+  grp
+    .command("delete")
+    .description("Delete a thirdparty bank account")
+    .argument("<id>", "Thirdparty ID")
+    .argument("<bank-id>", "Bank account ID")
+    .option("--confirm", "Skip confirmation prompt")
+    .option("--json", "Output as JSON")
+    .action(async (id, bankId, opts) => {
+      try {
+        if (
+          !(await confirmOrCancel(
+            `Delete bank account ${bankId} from thirdparty ${id}?`,
+            opts,
+          ))
+        )
+          return;
+        if (dryRunJson("thirdparties.bankAccounts.delete", { id, bankId })) return;
+        const client = createClient();
+        await client.delete(`thirdparties/${id}/bankaccounts/${bankId}`);
+        if (opts.json) { printJson({ deleted: bankId }); return; }
+        printInfo(`Deleted bank account ${bankId} from thirdparty ${id}.`);
+      } catch (err) { exitWithError(err, Boolean(opts.json)); }
+    });
+
+  return grp;
+}
+
+/** `thirdparties gateways` — external site / payment-gateway accounts (societe accounts). */
+function createThirdpartyGatewaysCommand(): Command {
+  const grp = new Command("gateways").description(
+    "Manage a thirdparty's external site accounts (e.g. Stripe/PayPal gateway keys)",
+  );
+
+  addListOptions(
+    grp
+      .command("list")
+      .description("List a thirdparty's gateway accounts")
+      .argument("<id>", "Thirdparty ID"),
+  )
+    .option("--site <name>", "Filter by site name")
+    .action(async (id, opts) => {
+      try {
+        const client = createClient();
+        let items: Record<string, unknown>[] = [];
+        try {
+          items = await client.get<Record<string, unknown>[]>(
+            `thirdparties/${id}/accounts`,
+            { site: opts.site },
+          );
+        } catch (err) {
+          if (!(err instanceof DolibarrApiError && err.status === 404)) throw err;
+        }
+        renderList(items, {
+          opts,
+          columns: [
+            { key: "id", label: "ID" },
+            { key: "site", label: "Site" },
+            { key: "key_account", label: "Key" },
+            { key: "login", label: "Login" },
+          ],
+        });
+      } catch (err) { exitWithError(err, Boolean(opts.json || opts.output === "json")); }
+    });
+
+  grp
+    .command("create")
+    .description("Add a gateway account to a thirdparty")
+    .argument("<id>", "Thirdparty ID")
+    .requiredOption("--site <name>", "Site name (e.g. Stripe, PayPal)")
+    .option("--key <key>", "Account key/id at the site")
+    .option("--login <login>", "Login")
+    .option("--from-json <file>", "Create from JSON file")
+    .option("--json", "Output as JSON")
+    .action(async (id, opts) => {
+      try {
+        let body: Record<string, unknown>;
+        if (opts.fromJson) {
+          body = JSON.parse(fs.readFileSync(opts.fromJson, "utf-8"));
+        } else {
+          body = prunePayload({ site: opts.site, key_account: opts.key, login: opts.login });
+        }
+        if (dryRunJson("thirdparties.gateways.create", { id, body })) return;
+        const client = createClient();
+        const result = await client.post<unknown>(`thirdparties/${id}/accounts`, body);
+        if (opts.json) { printJson(result); return; }
+        printInfo(`Added gateway account (${opts.site}) to thirdparty ${id}.`);
+      } catch (err) { exitWithError(err, Boolean(opts.json)); }
+    });
+
+  grp
+    .command("delete")
+    .description("Delete a thirdparty gateway account by site")
+    .argument("<id>", "Thirdparty ID")
+    .argument("<site>", "Site name")
+    .option("--confirm", "Skip confirmation prompt")
+    .option("--json", "Output as JSON")
+    .action(async (id, site, opts) => {
+      try {
+        if (!(await confirmOrCancel(`Delete gateway account "${site}" from thirdparty ${id}?`, opts)))
+          return;
+        if (dryRunJson("thirdparties.gateways.delete", { id, site })) return;
+        const client = createClient();
+        await client.delete(`thirdparties/${id}/accounts/${encodeURIComponent(site)}`);
+        if (opts.json) { printJson({ deleted: site }); return; }
+        printInfo(`Deleted gateway account "${site}" from thirdparty ${id}.`);
+      } catch (err) { exitWithError(err, Boolean(opts.json)); }
+    });
+
+  return grp;
 }

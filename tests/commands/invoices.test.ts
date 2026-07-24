@@ -76,4 +76,10 @@ describe("invoices command", () => {
   it("exposes a due-date column in the detail fields", () => {
     expect(invoiceDetailFields.map((c) => c.key)).toContain("date_lim_reglement");
   });
+
+  it("registers unpay and set-draft (payment reversal path)", () => {
+    expect(sub(cmd, "unpay")).toBeDefined();
+    expect(sub(cmd, "set-draft")).toBeDefined();
+    expect(flags(sub(cmd, "set-draft")!)).toContain("--warehouse");
+  });
 });

@@ -272,6 +272,46 @@ export function createInvoicesCommand(): Command {
       } catch (err) { exitWithError(err, Boolean(opts.json)); }
     });
 
+  addGetOptions(
+    cmd
+      .command("unpay")
+      .description("Reverse a paid invoice back to unpaid (payment reversal)")
+      .argument("<id>", "Invoice ID"),
+  )
+    .addHelpText(
+      "after",
+      "\nNote: Dolibarr's REST API has no payment-delete endpoint. `unpay` flips the" +
+        "\ninvoice status from paid back to unpaid/validated; to also remove the" +
+        "\nrecorded payment, do it in the Dolibarr web UI, or `set-draft` and re-enter.",
+    )
+    .action(async (id, opts) => {
+      try {
+        if (dryRunJson("invoices.unpay", { id })) return;
+        const client = createClient();
+        await client.post<unknown>(`invoices/${id}/settounpaid`, {});
+        await echoState(client, `invoices/${id}`, opts, invoiceDetailFields);
+      } catch (err) { exitWithError(err, Boolean(opts.json || opts.output === "json")); }
+    });
+
+  addGetOptions(
+    cmd
+      .command("set-draft")
+      .description("Set an invoice back to draft")
+      .argument("<id>", "Invoice ID"),
+  )
+    .option("--warehouse <id>", "Warehouse ID for stock reversal")
+    .action(async (id, opts) => {
+      try {
+        // Dolibarr's settodraft route requires an integer idwarehouse even when
+        // no stock movement applies; default to 0 (no warehouse) when unset.
+        const body = { idwarehouse: opts.warehouse ? Number(opts.warehouse) : 0 };
+        if (dryRunJson("invoices.setDraft", { id, body })) return;
+        const client = createClient();
+        await client.post<unknown>(`invoices/${id}/settodraft`, body);
+        await echoState(client, `invoices/${id}`, opts, invoiceDetailFields);
+      } catch (err) { exitWithError(err, Boolean(opts.json || opts.output === "json")); }
+    });
+
   cmd
     .command("add-line")
     .description("Add a line to an invoice")

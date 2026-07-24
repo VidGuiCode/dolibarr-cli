@@ -87,6 +87,8 @@ dolibarr invoices update 12 --date 2025-06-15 --socid 4 --due-date 2025-07-15   
 dolibarr invoices update-line 12 34 --subprice 40 --qty 2   # edit a draft line; totals recompute
 dolibarr invoices validate 12
 dolibarr invoices pay 12 --amount 500.00 --date 2025-12-01 --payment-type CB   # or a numeric id
+dolibarr invoices unpay 12         # reverse a paid invoice back to unpaid
+dolibarr invoices set-draft 12     # send a validated invoice back to draft
 
 # Supplier invoices
 dolibarr supplier-invoices list --thirdparty 3
@@ -96,7 +98,14 @@ dolibarr supplier-invoices update 7 --date 2025-03-01 --ref-supplier INV-2025-03
 # Bank
 dolibarr bank list
 dolibarr bank transactions 1
+dolibarr bank add-transaction 1 --date 2026-05-05 --type VIR --label "Bank fee" --amount -3.50
+dolibarr bank update-transaction 1 240 --label "Corrected label"   # only the label is API-editable
 dolibarr bank transfer --from 1 --to 2 --amount 100.00 --date 2026-05-05 --description "Internal transfer"
+
+# Thirdparty banking (RIB / SEPA / gateways)
+dolibarr thirdparties bank-accounts list 3
+dolibarr thirdparties bank-accounts create 3 --label Main --iban LU28... --bic BCEELULL --rum RUM-0001
+dolibarr thirdparties outstanding 3 --mode supplier   # unpaid purchase invoices for a supplier
 
 # Accounting
 dolibarr accounting ledger --period currentyear --format CSV

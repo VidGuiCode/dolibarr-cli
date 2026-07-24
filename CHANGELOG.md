@@ -1,5 +1,52 @@
 # Changelog
 
+## 0.3.1 - 2026-07-24
+
+Deep endpoint coverage — line 0.3.x, part 2. Theme: banking edits (M2, the #2 functional
+gap) + thirdparties banking. A recorded payment or bank line was previously immutable,
+forcing whole-invoice deletion to fix a mistake.
+
+### Added
+
+- **`invoices unpay <id>` / `invoices set-draft <id>`** — reverse a paid invoice back to
+  unpaid, or set a validated invoice back to draft (for corrections). Both echo the
+  resulting status. `set-draft` sends the `idwarehouse` (default 0) that Dolibarr's route
+  requires.
+- **`bank update <id>` / `bank delete <id>`** — bank-account edit and delete (completes the
+  account CRUD).
+- **`bank add-transaction` / `update-transaction` / `delete-transaction`** — record a manual
+  bank line, edit its label, or delete it. `--date` accepts `YYYY-MM-DD`.
+- **`thirdparties bank-accounts` (list/create/update/delete)** — a thirdparty's company bank
+  accounts including RIB (`--code-banque --code-guichet --number --cle-rib`) and SEPA
+  (`--rum --owner`) fields; IBAN/BIC. Listing an account-less thirdparty shows an empty
+  table instead of erroring (Dolibarr returns 404 in that case).
+- **`thirdparties outstanding <id>`** — outstanding (unpaid) totals, `--type
+  invoices|orders|proposals` and `--mode customer|supplier` (supplier reads the purchase
+  side).
+- **`thirdparties gateways` (list/create/delete)** — external site / payment-gateway
+  accounts (societe accounts).
+
+### Changed
+
+- **`thirdparties merge` now confirms before merging** — the source thirdparty is
+  permanently deleted, so it prompts (or requires `--confirm` in non-interactive mode) and
+  still honors `--dry-run`.
+
+### Notes on Dolibarr API limits (verified live vs 20.0.4)
+
+- **A bank transaction's date is not editable via the REST API** — only its label is. The
+  `update-transaction` help says so; it exposes `--label` only rather than a `--date` that
+  would silently no-op.
+- **There is no REST payment-delete endpoint** (neither invoices nor supplier-invoices).
+  `unpay` reverses the paid status; fully removing a recorded payment must be done in the
+  Dolibarr web UI. Supplier invoices additionally expose no status-reversal routes.
+
+### Tests
+
+- Added bank (account/transaction body builders, new subcommands), invoices (unpay/
+  set-draft), and thirdparties (bank-account body, outstanding path, merge guard) tests.
+  Test total: 216 → 226.
+
 ## 0.3.0 - 2026-07-24
 
 Deep endpoint coverage — line 0.3.x, part 1. Theme: editable `update` (M1, the #1

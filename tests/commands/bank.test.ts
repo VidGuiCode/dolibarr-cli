@@ -3,6 +3,8 @@ import type { Command } from "commander";
 import {
   bankAccountColumns,
   bankAccountFields,
+  buildBankAccountBody,
+  buildBankTransactionBody,
   createBankCommand,
   parseBankTransferDate,
   sanitizeBankAccountListItem,
@@ -109,5 +111,42 @@ describe("bank command", () => {
   it("rejects invalid transfer dates", () => {
     expect(() => parseBankTransferDate("2026-02-30")).toThrow(/valid calendar date/);
     expect(() => parseBankTransferDate("05/05/2026")).toThrow(/YYYY-MM-DD/);
+  });
+
+  it("registers account update/delete and transaction add/update/delete", () => {
+    for (const name of [
+      "update",
+      "delete",
+      "add-transaction",
+      "update-transaction",
+      "delete-transaction",
+    ]) {
+      expect(sub(cmd, name), name).toBeDefined();
+    }
+  });
+
+  it("maps bank-account flags to Dolibarr field names", () => {
+    expect(
+      buildBankAccountBody({ label: "Main", number: "123", iban: "LU28", bic: "BCEE", currency: "EUR", bankName: "BCEE Bank" }),
+    ).toEqual({
+      label: "Main",
+      account_number: "123",
+      iban_prefix: "LU28",
+      bic: "BCEE",
+      currency_code: "EUR",
+      bank: "BCEE Bank",
+    });
+  });
+
+  it("builds a transaction body with a normalized date", () => {
+    expect(
+      buildBankTransactionBody({ date: "2025-06-15", type: "VIR", label: "T", amount: "-12.5" }),
+    ).toEqual({ date: 1749945600, type: "VIR", label: "T", amount: -12.5 });
+  });
+
+  it("update-transaction only offers --label (Dolibarr API cannot edit a line's date)", () => {
+    const f = flags(sub(cmd, "update-transaction")!);
+    expect(f).toContain("--label");
+    expect(f).not.toContain("--date");
   });
 });
