@@ -1,5 +1,32 @@
 # Changelog
 
+## 0.3.7 - 2026-07-24
+
+Deep endpoint coverage — line 0.3.x, part 8: **product pricing**.
+
+> ⚠️ **Module-gated (same as v0.3.6).** All `products/*` routes are `403` on the reference
+> instance (route exists, API user lacks product rights), so these were built against the
+> documented, route-confirmed shape and covered by structural tests, not exercised live.
+
+### Added
+
+- **`products purchase-prices list [product-id]`** — list a product's supplier prices, or
+  all supplier products (`--supplier` filter).
+- **`products purchase-prices set <product-id>`** — add/update a supplier price
+  (`--supplier --buyprice --qty --price-base --ref-fourn --tva-tx --delivery-days`).
+  Dolibarr **upserts** by supplier — there is no separate update route (verified: `PUT
+  .../purchase_prices/{id}` is a 404), so `set` covers both create and update.
+- **`products purchase-prices delete <product-id> <price-id>`**.
+- **`products multiprices show <product-id> --by segment|customer|quantity`** — read the
+  selling multiprices. Read-only: Dolibarr exposes no REST setter for multiprices (set
+  them in the web UI or via a product update).
+- **`products price-by-qty <product-id>`** — read the per-quantity selling price grid.
+
+### Tests
+
+- Added products pricing-surface tests (subgroup registration, `buildPurchasePriceBody`,
+  the no-update assertion). Test total: 254 → 257.
+
 ## 0.3.6 - 2026-07-24
 
 Deep endpoint coverage — line 0.3.x, part 7: **product variants**.

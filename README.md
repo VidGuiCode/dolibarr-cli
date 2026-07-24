@@ -116,6 +116,8 @@ dolibarr orders reopen 42
 dolibarr products attributes create --ref COL --label Color
 dolibarr products variants create 42 --price-impact 5 --feature 1:3 --feature 2:7
 dolibarr products subproducts add 42 88 --qty 2
+dolibarr products purchase-prices set 42 --supplier 3 --buyprice 12.50   # upserts by supplier
+dolibarr products multiprices show 42 --by segment
 
 # Categories & links
 dolibarr categories link 12 customer 3        # link thirdparty 3 to category 12

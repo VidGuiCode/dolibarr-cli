@@ -215,7 +215,157 @@ export function createProductsCommand(): Command {
   cmd.addCommand(createProductAttributeValuesCommand());
   cmd.addCommand(createProductVariantsCommand());
   cmd.addCommand(createProductSubproductsCommand());
+  cmd.addCommand(createProductPurchasePricesCommand());
+  cmd.addCommand(createProductMultipricesCommand());
+  cmd.addCommand(createProductPriceByQtyCommand());
 
+  return cmd;
+}
+
+/** Build the POST body for a supplier (purchase) price. */
+export function buildPurchasePriceBody(opts: Record<string, unknown>): Record<string, unknown> {
+  const body: Record<string, unknown> = {
+    qty: Number(opts.qty ?? 1),
+    buyprice: Number(opts.buyprice),
+    price_base_type: (opts.priceBase as string) ?? "HT",
+    fourn_id: Number(opts.supplier),
+  };
+  if (opts.refFourn !== undefined) body.ref_fourn = opts.refFourn;
+  if (opts.tvaTx !== undefined) body.tva_tx = Number(opts.tvaTx);
+  if (opts.deliveryDays !== undefined) body.delivery_time_days = Number(opts.deliveryDays);
+  if (opts.availability !== undefined) body.availability = Number(opts.availability);
+  return body;
+}
+
+/** `products purchase-prices` — supplier buying prices. */
+function createProductPurchasePricesCommand(): Command {
+  const grp = new Command("purchase-prices").description("Manage supplier (purchase) prices");
+
+  addListOptions(
+    grp
+      .command("list")
+      .description("List purchase prices for a product, or across all suppliers")
+      .argument("[product-id]", "Product ID (omit to list all supplier products)"),
+  )
+    .option("--supplier <id>", "Filter by supplier ID (all-products mode)")
+    .action(async (productId, opts) => {
+      try {
+        const client = createClient();
+        const path = productId
+          ? `products/${productId}/purchase_prices`
+          : "products/purchase_prices";
+        const items = await client.get<Record<string, unknown>[]>(
+          path,
+          productId ? undefined : buildListQuery(opts, { supplier: opts.supplier }),
+        );
+        renderList(Array.isArray(items) ? items : [items], {
+          opts,
+          columns: [
+            { key: "id", label: "ID" },
+            { key: "ref", label: "Ref" },
+            { key: "ref_supplier", label: "Supplier Ref", format: (i) => String(i.ref_supplier ?? i.ref_fourn ?? "") },
+            { key: "fourn_id", label: "Supplier", format: (i) => String(i.fourn_id ?? i.socid ?? "") },
+            { key: "qty", label: "Min Qty" },
+            { key: "fourn_price", label: "Buy Price", format: (i) => String(i.fourn_price ?? i.buyprice ?? "") },
+          ],
+        });
+      } catch (err) { exitWithError(err, Boolean(opts.json || opts.output === "json")); }
+    });
+
+  grp
+    .command("set")
+    .description("Add or update a supplier price (Dolibarr upserts by supplier — there is no separate update route)")
+    .argument("<product-id>", "Product ID")
+    .requiredOption("--supplier <id>", "Supplier thirdparty ID")
+    .requiredOption("--buyprice <n>", "Purchase price")
+    .option("--qty <n>", "Minimum quantity", "1")
+    .option("--price-base <type>", "HT or TTC", "HT")
+    .option("--ref-fourn <ref>", "Supplier's product reference")
+    .option("--tva-tx <n>", "VAT rate")
+    .option("--delivery-days <n>", "Delivery time in days")
+    .option("--availability <id>", "Availability delay ID")
+    .option("--json", "Output as JSON")
+    .action(async (productId, opts) => {
+      try {
+        const body = buildPurchasePriceBody(opts);
+        if (dryRunJson("products.purchasePrices.set", { productId, body })) return;
+        const client = createClient();
+        const result = await client.post<unknown>(`products/${productId}/purchase_prices`, body);
+        if (opts.json) { printJson(result); return; }
+        printInfo(`Set supplier price on product ${productId} (supplier ${opts.supplier}).`);
+      } catch (err) { exitWithError(err, Boolean(opts.json)); }
+    });
+
+  grp
+    .command("delete")
+    .description("Delete a supplier price")
+    .argument("<product-id>", "Product ID")
+    .argument("<price-id>", "Purchase price ID")
+    .option("--confirm", "Skip confirmation prompt")
+    .option("--json", "Output as JSON")
+    .action(async (productId, priceId, opts) => {
+      try {
+        if (!(await confirmOrCancel(`Delete purchase price ${priceId} on product ${productId}?`, opts)))
+          return;
+        if (dryRunJson("products.purchasePrices.delete", { productId, priceId })) return;
+        const client = createClient();
+        await client.delete(`products/${productId}/purchase_prices/${priceId}`);
+        if (opts.json) { printJson({ deleted: priceId }); return; }
+        printInfo(`Deleted purchase price ${priceId} on product ${productId}.`);
+      } catch (err) { exitWithError(err, Boolean(opts.json)); }
+    });
+
+  return grp;
+}
+
+/** `products multiprices` — read selling multiprices (segment / customer / quantity). */
+function createProductMultipricesCommand(): Command {
+  const grp = new Command("multiprices").description(
+    "Read a product's selling multiprices (read-only — Dolibarr exposes no REST setter)",
+  );
+
+  addGetOptions(
+    grp
+      .command("show")
+      .description("Show selling multiprices for a product")
+      .argument("<product-id>", "Product ID"),
+  )
+    .option("--by <mode>", "segment | customer | quantity", "segment")
+    .option("--thirdparty <id>", "Thirdparty ID (customer mode)")
+    .action(async (productId, opts) => {
+      try {
+        const mode =
+          opts.by === "customer"
+            ? "per_customer"
+            : opts.by === "quantity"
+              ? "per_quantity"
+              : "per_segment";
+        const client = createClient();
+        const result = await client.get<unknown>(
+          `products/${productId}/selling_multiprices/${mode}`,
+          opts.thirdparty ? { thirdparty_id: opts.thirdparty } : undefined,
+        );
+        printJson(result);
+      } catch (err) { exitWithError(err, Boolean(opts.json || opts.output === "json")); }
+    });
+
+  return grp;
+}
+
+/** `products price-by-qty` — read the per-quantity selling price grid. */
+function createProductPriceByQtyCommand(): Command {
+  const cmd = new Command("price-by-qty").description(
+    "Read a product's per-quantity selling prices",
+  );
+  addGetOptions(cmd.argument("<product-id>", "Product ID")).action(async (productId, opts) => {
+    try {
+      const client = createClient();
+      const result = await client.get<unknown>(
+        `products/${productId}/selling_multiprices/per_quantity`,
+      );
+      printJson(result);
+    } catch (err) { exitWithError(err, Boolean(opts.json || opts.output === "json")); }
+  });
   return cmd;
 }
 

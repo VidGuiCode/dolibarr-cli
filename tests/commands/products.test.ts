@@ -1,6 +1,10 @@
 import { describe, it, expect } from "vitest";
 import type { Command } from "commander";
-import { buildVariantBody, createProductsCommand } from "../../src/commands/products.js";
+import {
+  buildPurchasePriceBody,
+  buildVariantBody,
+  createProductsCommand,
+} from "../../src/commands/products.js";
 
 function sub(cmd: Command, name: string): Command | undefined {
   return cmd.commands.find((c) => c.name() === name);
@@ -46,5 +50,35 @@ describe("products command — variants surface (v0.3.6)", () => {
 
   it("omits features when no --feature pairs are given", () => {
     expect(buildVariantBody({ priceImpact: "5" })).toEqual({ price_impact: 5 });
+  });
+});
+
+describe("products command — pricing surface (v0.3.7)", () => {
+  const cmd = createProductsCommand();
+
+  it("registers purchase-prices, multiprices and price-by-qty", () => {
+    for (const name of ["purchase-prices", "multiprices", "price-by-qty"]) {
+      expect(sub(cmd, name), name).toBeDefined();
+    }
+  });
+
+  it("purchase-prices has list/set/delete (no update — Dolibarr upserts via POST)", () => {
+    const grp = sub(cmd, "purchase-prices")!;
+    expect(sub(grp, "list")).toBeDefined();
+    expect(sub(grp, "set")).toBeDefined();
+    expect(sub(grp, "delete")).toBeDefined();
+    expect(sub(grp, "update")).toBeUndefined();
+  });
+
+  it("builds a purchase-price body with required + optional fields", () => {
+    expect(
+      buildPurchasePriceBody({ supplier: "3", buyprice: "12.5", qty: "10", refFourn: "SUP-9" }),
+    ).toEqual({
+      qty: 10,
+      buyprice: 12.5,
+      price_base_type: "HT",
+      fourn_id: 3,
+      ref_fourn: "SUP-9",
+    });
   });
 });
