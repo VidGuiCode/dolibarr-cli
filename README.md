@@ -179,6 +179,12 @@ dolibarr shipments create --socid 5 --order 123 --date 2026-01-15
 dolibarr shipments validate 7 --no-trigger
 dolibarr receptions close 3
 
+# Interventions (fichinter)
+dolibarr interventions list --thirdparty 5
+dolibarr interventions create --socid 5 --description "On-site repair" --date 2026-03-01
+dolibarr interventions add-line 12 --description "Diagnostics" --hours 1.5
+dolibarr interventions validate 12
+
 # Raw API (escape hatch)
 dolibarr raw GET /thirdparties
 dolibarr raw POST /invoices --data '{"socid": 1}'
@@ -283,6 +289,7 @@ dolibarr thirdparties create --name "Test" --supplier --dry-run
 | `contracts` | Service contracts + line activation |
 | `shipments` | Customer shipments (expeditions) |
 | `receptions` | Supplier receptions |
+| `interventions` | Interventions (fichinter) + time lines |
 
 ## Development
 

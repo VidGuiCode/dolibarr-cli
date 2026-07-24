@@ -1,5 +1,43 @@
 # Changelog
 
+## 0.4.0 - 2026-07-25
+
+New resource groups — line 0.4.x, part 1: **`interventions`**.
+
+> ⚠️ **Module-gated / docs-sourced.** `/interventions` returns `403` on the reference
+> instance (the route exists — `api_interventions.class.php` — but the API user lacks
+> intervention permissions). Every path and HTTP method below was confirmed by probing the
+> live router (route-stage 404 vs. call-stage 403), and the request shapes come from the
+> documented API; the endpoints were **not exercised live**.
+
+### Added
+
+- **`interventions`** command group (`/interventions`, Dolibarr's *fichinter*):
+  - `list` — `--thirdparty` filter plus the shared `--limit/--page/--sort/--order/--filter`
+    and `--output/--json/--fields`.
+  - `get <id>` — two-column detail view; durations render as `1h 30m`.
+  - `create` — `--socid` (required) `--ref --ref-client --description --date --project
+    --contract --note-public --note-private`, or `--from-json`. Echoes the created object.
+  - `delete <id>` — confirmation prompt or `--confirm`.
+  - `validate <id>` — `--no-trigger`; always sends `notrigger` because Dolibarr rejects an
+    empty body on this route. Echoes the resulting state.
+  - `close <id>` — echoes the resulting state.
+  - `lines <id>` — the intervention's time lines (read from the embedded `lines` array;
+    there is no standalone lines route).
+  - `add-line <id>` — `--description --date --hours` (converted to seconds) or
+    `--duration <secs>`, or `--from-json`.
+
+### Not added (verified absent on Dolibarr 20.0.4)
+
+- **`update`** — no `PUT /interventions/{id}`; the router returns a route-stage 404.
+- **line edit / line delete** — no `PUT`/`DELETE` on `/interventions/{id}/lines/{lineid}`.
+- **ref-lookup** — no `/interventions/ref/{ref}` route, so `get` takes a numeric ID only.
+
+### Tests
+
+- Added intervention command-tree, body-builder and column-formatter tests.
+  Test total: 260 → 277.
+
 ## 0.3.8 - 2026-07-24
 
 Deep endpoint coverage — line 0.3.x, part 9 (final): **product stock & movements**.
