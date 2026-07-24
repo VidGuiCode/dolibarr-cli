@@ -211,5 +211,368 @@ export function createProductsCommand(): Command {
       } catch (err) { exitWithError(err, Boolean(opts.json)); }
     });
 
+  cmd.addCommand(createProductAttributesCommand());
+  cmd.addCommand(createProductAttributeValuesCommand());
+  cmd.addCommand(createProductVariantsCommand());
+  cmd.addCommand(createProductSubproductsCommand());
+
   return cmd;
+}
+
+/**
+ * Build the POST/PUT body for a product variant. `--feature attr:value` pairs
+ * (repeatable) become the `features` map `{ attribute_id: value_id }`.
+ */
+export function buildVariantBody(opts: Record<string, unknown>): Record<string, unknown> {
+  const body: Record<string, unknown> = {};
+  if (opts.priceImpact !== undefined) body.price_impact = Number(opts.priceImpact);
+  if (opts.weightImpact !== undefined) body.weight_impact = Number(opts.weightImpact);
+  if (opts.pricePercent !== undefined) body.price_impact_is_percent = Boolean(opts.pricePercent);
+  if (opts.reference !== undefined) body.reference = opts.reference;
+  const features = opts.feature as string[] | undefined;
+  if (features && features.length > 0) {
+    const map: Record<string, number> = {};
+    for (const pair of features) {
+      const [attr, value] = String(pair).split(":");
+      if (attr && value) map[attr] = Number(value);
+    }
+    body.features = map;
+  }
+  return body;
+}
+
+/** `products attributes` — variant attribute definitions (e.g. Color, Size). */
+function createProductAttributesCommand(): Command {
+  const grp = new Command("attributes").description("Manage product variant attributes");
+
+  addListOptions(
+    grp.command("list").description("List product attributes"),
+  ).action(async (opts) => {
+    try {
+      const client = createClient();
+      const items = await client.get<Record<string, unknown>[]>(
+        "products/attributes",
+        buildListQuery(opts),
+      );
+      renderList(items, {
+        opts,
+        columns: [
+          { key: "id", label: "ID" },
+          { key: "ref", label: "Ref" },
+          { key: "label", label: "Label" },
+        ],
+      });
+    } catch (err) { exitWithError(err, Boolean(opts.json || opts.output === "json")); }
+  });
+
+  addGetOptions(
+    grp.command("get").description("Get a product attribute").argument("<id>", "Attribute ID"),
+  ).action(async (id, opts) => {
+    try {
+      const client = createClient();
+      const item = await client.get<Record<string, unknown>>(`products/attributes/${id}`);
+      renderGet(item, {
+        opts,
+        fields: [
+          { key: "id", label: "ID" },
+          { key: "ref", label: "Ref" },
+          { key: "label", label: "Label" },
+          { key: "rang", label: "Rank" },
+        ],
+      });
+    } catch (err) { exitWithError(err, Boolean(opts.json || opts.output === "json")); }
+  });
+
+  grp
+    .command("create")
+    .description("Create a product attribute")
+    .requiredOption("--ref <ref>", "Attribute reference code")
+    .requiredOption("--label <label>", "Attribute label")
+    .option("--json", "Output as JSON")
+    .action(async (opts) => {
+      try {
+        const body = { ref: opts.ref, label: opts.label };
+        if (dryRunJson("products.attributes.create", { body })) return;
+        const client = createClient();
+        const result = await client.post<number>("products/attributes", body);
+        if (opts.json) { printJson(result); return; }
+        printInfo(`Created product attribute with ID: ${result}`);
+      } catch (err) { exitWithError(err, Boolean(opts.json)); }
+    });
+
+  grp
+    .command("update")
+    .description("Update a product attribute")
+    .argument("<id>", "Attribute ID")
+    .option("--ref <ref>", "Attribute reference code")
+    .option("--label <label>", "Attribute label")
+    .option("--json", "Output as JSON")
+    .action(async (id, opts) => {
+      try {
+        const body: Record<string, unknown> = {};
+        if (opts.ref !== undefined) body.ref = opts.ref;
+        if (opts.label !== undefined) body.label = opts.label;
+        if (dryRunJson("products.attributes.update", { id, body })) return;
+        const client = createClient();
+        const result = await client.put<unknown>(`products/attributes/${id}`, body);
+        if (opts.json) { printJson(result); return; }
+        printInfo(`Updated product attribute ${id}`);
+      } catch (err) { exitWithError(err, Boolean(opts.json)); }
+    });
+
+  grp
+    .command("delete")
+    .description("Delete a product attribute")
+    .argument("<id>", "Attribute ID")
+    .option("--confirm", "Skip confirmation prompt")
+    .option("--json", "Output as JSON")
+    .action(async (id, opts) => {
+      try {
+        if (!(await confirmOrCancel(`Delete product attribute ${id}?`, opts))) return;
+        if (dryRunJson("products.attributes.delete", { id })) return;
+        const client = createClient();
+        await client.delete(`products/attributes/${id}`);
+        if (opts.json) { printJson({ deleted: id }); return; }
+        printInfo(`Deleted product attribute ${id}`);
+      } catch (err) { exitWithError(err, Boolean(opts.json)); }
+    });
+
+  return grp;
+}
+
+/** `products attribute-values` — the possible values of a variant attribute. */
+function createProductAttributeValuesCommand(): Command {
+  const grp = new Command("attribute-values").description(
+    "Manage the possible values of a product attribute",
+  );
+
+  addListOptions(
+    grp
+      .command("list")
+      .description("List values for an attribute")
+      .argument("<attribute-id>", "Attribute ID"),
+  ).action(async (attributeId, opts) => {
+    try {
+      const client = createClient();
+      const items = await client.get<Record<string, unknown>[]>(
+        `products/attributes/${attributeId}/values`,
+      );
+      renderList(items, {
+        opts,
+        columns: [
+          { key: "id", label: "ID" },
+          { key: "ref", label: "Ref" },
+          { key: "value", label: "Value" },
+        ],
+      });
+    } catch (err) { exitWithError(err, Boolean(opts.json || opts.output === "json")); }
+  });
+
+  grp
+    .command("create")
+    .description("Add a value to an attribute")
+    .argument("<attribute-id>", "Attribute ID")
+    .requiredOption("--ref <ref>", "Value reference")
+    .requiredOption("--value <text>", "Value display text")
+    .option("--json", "Output as JSON")
+    .action(async (attributeId, opts) => {
+      try {
+        const body = { ref: opts.ref, value: opts.value };
+        if (dryRunJson("products.attributeValues.create", { attributeId, body })) return;
+        const client = createClient();
+        const result = await client.post<number>(
+          `products/attributes/${attributeId}/values`,
+          body,
+        );
+        if (opts.json) { printJson(result); return; }
+        printInfo(`Created attribute value with ID: ${result}`);
+      } catch (err) { exitWithError(err, Boolean(opts.json)); }
+    });
+
+  grp
+    .command("delete")
+    .description("Delete an attribute value by ID")
+    .argument("<value-id>", "Value ID")
+    .option("--confirm", "Skip confirmation prompt")
+    .option("--json", "Output as JSON")
+    .action(async (valueId, opts) => {
+      try {
+        if (!(await confirmOrCancel(`Delete attribute value ${valueId}?`, opts))) return;
+        if (dryRunJson("products.attributeValues.delete", { valueId })) return;
+        const client = createClient();
+        await client.delete(`products/attributes/values/${valueId}`);
+        if (opts.json) { printJson({ deleted: valueId }); return; }
+        printInfo(`Deleted attribute value ${valueId}`);
+      } catch (err) { exitWithError(err, Boolean(opts.json)); }
+    });
+
+  return grp;
+}
+
+/** `products variants` — concrete variant products built from attribute values. */
+function createProductVariantsCommand(): Command {
+  const grp = new Command("variants").description("Manage a product's variants");
+
+  addListOptions(
+    grp
+      .command("list")
+      .description("List variants of a product")
+      .argument("<product-id>", "Parent product ID"),
+  )
+    .option("--include-stock", "Include stock data")
+    .action(async (productId, opts) => {
+      try {
+        const client = createClient();
+        const items = await client.get<Record<string, unknown>[]>(
+          `products/${productId}/variants`,
+          opts.includeStock ? { includestock: 1 } : undefined,
+        );
+        renderList(items, {
+          opts,
+          columns: [
+            { key: "id", label: "ID" },
+            { key: "ref", label: "Ref" },
+            { key: "label", label: "Label" },
+            { key: "price_impact", label: "Price impact" },
+          ],
+        });
+      } catch (err) { exitWithError(err, Boolean(opts.json || opts.output === "json")); }
+    });
+
+  grp
+    .command("create")
+    .description("Create a variant from attribute values")
+    .argument("<product-id>", "Parent product ID")
+    .requiredOption("--price-impact <n>", "Price difference vs. parent", "0")
+    .option("--weight-impact <n>", "Weight difference vs. parent", "0")
+    .option("--price-percent", "Treat price impact as a percentage")
+    .option("--reference <ref>", "Variant reference")
+    .option(
+      "--feature <attr:value>",
+      "Attribute-id:value-id pair (repeatable)",
+      (v: string, acc: string[]) => { acc.push(v); return acc; },
+      [] as string[],
+    )
+    .option("--json", "Output as JSON")
+    .action(async (productId, opts) => {
+      try {
+        const body = buildVariantBody(opts);
+        if (dryRunJson("products.variants.create", { productId, body })) return;
+        const client = createClient();
+        const result = await client.post<number>(`products/${productId}/variants`, body);
+        if (opts.json) { printJson(result); return; }
+        printInfo(`Created variant with ID: ${result}`);
+      } catch (err) { exitWithError(err, Boolean(opts.json)); }
+    });
+
+  grp
+    .command("update")
+    .description("Update a variant")
+    .argument("<variant-id>", "Variant ID")
+    .option("--price-impact <n>", "Price difference vs. parent")
+    .option("--weight-impact <n>", "Weight difference vs. parent")
+    .option("--price-percent", "Treat price impact as a percentage")
+    .option("--reference <ref>", "Variant reference")
+    .option("--json", "Output as JSON")
+    .action(async (variantId, opts) => {
+      try {
+        const body = buildVariantBody(opts);
+        if (dryRunJson("products.variants.update", { variantId, body })) return;
+        const client = createClient();
+        const result = await client.put<unknown>(`products/variants/${variantId}`, body);
+        if (opts.json) { printJson(result); return; }
+        printInfo(`Updated variant ${variantId}`);
+      } catch (err) { exitWithError(err, Boolean(opts.json)); }
+    });
+
+  grp
+    .command("delete")
+    .description("Delete a variant")
+    .argument("<variant-id>", "Variant ID")
+    .option("--confirm", "Skip confirmation prompt")
+    .option("--json", "Output as JSON")
+    .action(async (variantId, opts) => {
+      try {
+        if (!(await confirmOrCancel(`Delete variant ${variantId}?`, opts))) return;
+        if (dryRunJson("products.variants.delete", { variantId })) return;
+        const client = createClient();
+        await client.delete(`products/variants/${variantId}`);
+        if (opts.json) { printJson({ deleted: variantId }); return; }
+        printInfo(`Deleted variant ${variantId}`);
+      } catch (err) { exitWithError(err, Boolean(opts.json)); }
+    });
+
+  return grp;
+}
+
+/** `products subproducts` — BOM/kit children of a product. */
+function createProductSubproductsCommand(): Command {
+  const grp = new Command("subproducts").description("Manage a product's subproducts (BOM/kit)");
+
+  addGetOptions(
+    grp
+      .command("list")
+      .description("List a product's subproducts")
+      .argument("<product-id>", "Parent product ID"),
+  ).action(async (productId, opts) => {
+    try {
+      const client = createClient();
+      const items = await client.get<Record<string, unknown>[]>(
+        `products/${productId}/subproducts`,
+      );
+      renderList(items, {
+        opts,
+        columns: [
+          { key: "id", label: "ID" },
+          { key: "ref", label: "Ref" },
+          { key: "label", label: "Label" },
+          { key: "qty", label: "Qty" },
+        ],
+      });
+    } catch (err) { exitWithError(err, Boolean(opts.json || opts.output === "json")); }
+  });
+
+  grp
+    .command("add")
+    .description("Add a subproduct to a product")
+    .argument("<product-id>", "Parent product ID")
+    .argument("<subproduct-id>", "Child product ID")
+    .option("--qty <n>", "Quantity", "1")
+    .option("--incdec <n>", "1=increment parent stock, -1=decrement")
+    .option("--json", "Output as JSON")
+    .action(async (productId, subproductId, opts) => {
+      try {
+        const body: Record<string, unknown> = {
+          subproduct_id: Number(subproductId),
+          qty: Number(opts.qty ?? 1),
+        };
+        if (opts.incdec !== undefined) body.incdec = Number(opts.incdec);
+        if (dryRunJson("products.subproducts.add", { productId, body })) return;
+        const client = createClient();
+        const result = await client.post<unknown>(`products/${productId}/subproducts/add`, body);
+        if (opts.json) { printJson(result); return; }
+        printInfo(`Added subproduct ${subproductId} to product ${productId}.`);
+      } catch (err) { exitWithError(err, Boolean(opts.json)); }
+    });
+
+  grp
+    .command("remove")
+    .description("Remove a subproduct from a product")
+    .argument("<product-id>", "Parent product ID")
+    .argument("<subproduct-id>", "Child product ID")
+    .option("--confirm", "Skip confirmation prompt")
+    .option("--json", "Output as JSON")
+    .action(async (productId, subproductId, opts) => {
+      try {
+        if (!(await confirmOrCancel(`Remove subproduct ${subproductId} from product ${productId}?`, opts)))
+          return;
+        if (dryRunJson("products.subproducts.remove", { productId, subproductId })) return;
+        const client = createClient();
+        await client.delete(`products/${productId}/subproducts/remove/${subproductId}`);
+        if (opts.json) { printJson({ removed: subproductId }); return; }
+        printInfo(`Removed subproduct ${subproductId} from product ${productId}.`);
+      } catch (err) { exitWithError(err, Boolean(opts.json)); }
+    });
+
+  return grp;
 }

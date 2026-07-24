@@ -1,5 +1,34 @@
 # Changelog
 
+## 0.3.6 - 2026-07-24
+
+Deep endpoint coverage — line 0.3.x, part 7: **product variants**.
+
+> ⚠️ **Verification note.** On the reference instance (Dolibarr 20.0.4) the Products
+> module is enabled but the configured API user lacks product permissions, so every
+> `products/*` route answers `403 Forbidden` at the call stage (the route exists — it is
+> *not* a `404`). These commands were therefore built against the documented, route-
+> confirmed API shape and covered by structural tests, but could **not** be exercised
+> against live data. Grant the API user product read/write rights to use them.
+
+### Added
+
+- **`products attributes list|get|create|update|delete`** — variant attribute definitions
+  (e.g. Color, Size). `create` takes `--ref --label`.
+- **`products attribute-values list|create|delete`** — the possible values of an attribute
+  (`create <attribute-id> --ref --value`).
+- **`products variants list|create|update|delete`** — concrete variants built from
+  attribute values. `create <product-id> --price-impact --weight-impact --price-percent
+  --reference --feature <attr-id:value-id>` (repeat `--feature` per attribute; they become
+  the `features` map Dolibarr expects).
+- **`products subproducts list|add|remove`** — BOM/kit children of a product
+  (`add <product-id> <subproduct-id> --qty --incdec`).
+
+### Tests
+
+- Added products variant-surface tests (subgroup registration + `buildVariantBody` features
+  map). Test total: 249 → 254.
+
 ## 0.3.5 - 2026-07-24
 
 Deep endpoint coverage — line 0.3.x, part 6: thirdparty links, category ↔ object

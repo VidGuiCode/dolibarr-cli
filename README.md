@@ -112,6 +112,11 @@ dolibarr orders update-line 42 310 --qty 3        # edit a draft order line; tot
 dolibarr orders contacts list 42
 dolibarr orders reopen 42
 
+# Product variants (needs the Products module + API-user product rights)
+dolibarr products attributes create --ref COL --label Color
+dolibarr products variants create 42 --price-impact 5 --feature 1:3 --feature 2:7
+dolibarr products subproducts add 42 88 --qty 2
+
 # Categories & links
 dolibarr categories link 12 customer 3        # link thirdparty 3 to category 12
 dolibarr categories of-object customer 3      # categories a thirdparty belongs to
