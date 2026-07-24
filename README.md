@@ -185,6 +185,12 @@ dolibarr interventions create --socid 5 --description "On-site repair" --date 20
 dolibarr interventions add-line 12 --description "Diagnostics" --hours 1.5
 dolibarr interventions validate 12
 
+# Expense reports
+dolibarr expensereports list --user 2
+dolibarr expensereports create --user 2 --date-start 2026-03-01 --date-end 2026-03-31
+dolibarr expensereports set-status 4 --status approved --confirm
+dolibarr expensereports payments list
+
 # Raw API (escape hatch)
 dolibarr raw GET /thirdparties
 dolibarr raw POST /invoices --data '{"socid": 1}'
@@ -290,6 +296,7 @@ dolibarr thirdparties create --name "Test" --supplier --dry-run
 | `shipments` | Customer shipments (expeditions) |
 | `receptions` | Supplier receptions |
 | `interventions` | Interventions (fichinter) + time lines |
+| `expensereports` | Expense reports + payment tracking |
 
 ## Development
 

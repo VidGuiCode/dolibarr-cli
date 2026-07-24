@@ -14,8 +14,17 @@ import {
   prunePayload,
   renderGet,
   renderList,
+  resolveOutput,
   type ColumnSpec,
 } from "../core/resource-helpers.js";
+
+/**
+ * Print a human confirmation line, but stay silent in JSON mode so the echoed
+ * state remains parseable.
+ */
+const announce = (opts: Record<string, unknown>, msg: string): void => {
+  if (resolveOutput(opts) !== "json") printInfo(msg);
+};
 
 /**
  * Intervention (fichinter) statuses per Dolibarr.
@@ -153,10 +162,7 @@ export function createInterventionsCommand(): Command {
     }
   });
 
-  cmd
-    .command("create")
-    .description("Create an intervention")
-    .option("--json", "Output as JSON")
+  addGetOptions(cmd.command("create").description("Create an intervention"))
     .option("--from-json <file>", "Create from a JSON file")
     .option("--socid <id>", "Thirdparty ID (required)")
     .option("--ref <ref>", "Reference (auto-numbered when omitted)")
@@ -182,14 +188,10 @@ export function createInterventionsCommand(): Command {
         if (dryRunJson("interventions.create", { body })) return;
         const client = createClient();
         const id = await client.post<number>("interventions", body);
-        if (opts.json) {
-          printJson({ id });
-          return;
-        }
-        printInfo(`Created intervention with ID: ${id}`);
+        announce(opts, `Created intervention with ID: ${id}`);
         await echoState(client, `interventions/${id}`, opts, interventionDetailFields);
       } catch (err) {
-        exitWithError(err, Boolean(opts.json));
+        exitWithError(err, Boolean(opts.json || opts.output === "json"));
       }
     });
 
@@ -215,11 +217,12 @@ export function createInterventionsCommand(): Command {
       }
     });
 
-  cmd
-    .command("validate")
-    .description("Validate a draft intervention")
-    .argument("<id>", "Intervention ID")
-    .option("--json", "Output as JSON")
+  addGetOptions(
+    cmd
+      .command("validate")
+      .description("Validate a draft intervention")
+      .argument("<id>", "Intervention ID"),
+  )
     .option("--no-trigger", "Do not execute triggers after the action")
     .action(async (id, opts) => {
       try {
@@ -229,39 +232,29 @@ export function createInterventionsCommand(): Command {
         if (dryRunJson("interventions.validate", { id, body })) return;
         const client = createClient();
         await client.post<unknown>(`interventions/${id}/validate`, body);
-        if (opts.json) {
-          const fresh = await client.get<Record<string, unknown>>(`interventions/${id}`);
-          printJson(fresh);
-          return;
-        }
-        printInfo(`Validated intervention ${id}`);
+        announce(opts, `Validated intervention ${id}`);
         await echoState(client, `interventions/${id}`, opts, interventionDetailFields);
       } catch (err) {
-        exitWithError(err, Boolean(opts.json));
+        exitWithError(err, Boolean(opts.json || opts.output === "json"));
       }
     });
 
-  cmd
-    .command("close")
-    .description("Close a validated intervention")
-    .argument("<id>", "Intervention ID")
-    .option("--json", "Output as JSON")
-    .action(async (id, opts) => {
-      try {
-        if (dryRunJson("interventions.close", { id })) return;
-        const client = createClient();
-        await client.post<unknown>(`interventions/${id}/close`);
-        if (opts.json) {
-          const fresh = await client.get<Record<string, unknown>>(`interventions/${id}`);
-          printJson(fresh);
-          return;
-        }
-        printInfo(`Closed intervention ${id}`);
-        await echoState(client, `interventions/${id}`, opts, interventionDetailFields);
-      } catch (err) {
-        exitWithError(err, Boolean(opts.json));
-      }
-    });
+  addGetOptions(
+    cmd
+      .command("close")
+      .description("Close a validated intervention")
+      .argument("<id>", "Intervention ID"),
+  ).action(async (id, opts) => {
+    try {
+      if (dryRunJson("interventions.close", { id })) return;
+      const client = createClient();
+      await client.post<unknown>(`interventions/${id}/close`);
+      announce(opts, `Closed intervention ${id}`);
+      await echoState(client, `interventions/${id}`, opts, interventionDetailFields);
+    } catch (err) {
+      exitWithError(err, Boolean(opts.json || opts.output === "json"));
+    }
+  });
 
   addGetOptions(
     cmd
@@ -280,11 +273,12 @@ export function createInterventionsCommand(): Command {
     }
   });
 
-  cmd
-    .command("add-line")
-    .description("Add a time line to an intervention")
-    .argument("<id>", "Intervention ID")
-    .option("--json", "Output as JSON")
+  addGetOptions(
+    cmd
+      .command("add-line")
+      .description("Add a time line to an intervention")
+      .argument("<id>", "Intervention ID"),
+  )
     .option("--from-json <file>", "Add from a JSON file")
     .option("--description <text>", "Line description")
     .option("--date <date>", "Line date (YYYY-MM-DD or epoch)")
@@ -298,14 +292,10 @@ export function createInterventionsCommand(): Command {
         if (dryRunJson("interventions.addLine", { id, body })) return;
         const client = createClient();
         const lineId = await client.post<number>(`interventions/${id}/lines`, body);
-        if (opts.json) {
-          printJson({ id: lineId });
-          return;
-        }
-        printInfo(`Added line ${lineId} to intervention ${id}`);
+        announce(opts, `Added line ${lineId} to intervention ${id}`);
         await echoState(client, `interventions/${id}`, opts, interventionDetailFields);
       } catch (err) {
-        exitWithError(err, Boolean(opts.json));
+        exitWithError(err, Boolean(opts.json || opts.output === "json"));
       }
     });
 

@@ -87,6 +87,14 @@ describe("interventions command (v0.4.0)", () => {
     }
   });
 
+  it("state-echoing mutations accept the detail-view flags so the echo is projectable", () => {
+    for (const name of ["create", "validate", "close", "add-line"]) {
+      const f = flags(sub(cmd, name)!);
+      expect(f, `${name} --output`).toContain("--output");
+      expect(f, `${name} --fields`).toContain("--fields");
+    }
+  });
+
   it("delete requires explicit confirmation", () => {
     expect(flags(sub(cmd, "delete")!)).toContain("--confirm");
   });

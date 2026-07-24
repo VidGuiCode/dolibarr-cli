@@ -1,5 +1,68 @@
 # Changelog
 
+## 0.4.1 - 2026-07-25
+
+New resource groups — line 0.4.x, part 2: **`expensereports`**.
+
+> ✅ **Live-verified.** The Expense Report module is enabled on the reference instance, so
+> every route, field name and status code below was exercised against a real Dolibarr
+> 20.0.4 API (throwaway record, created and deleted). The one exception is flagged inline:
+> `payments add`.
+
+### Added
+
+- **`expensereports`** command group (`/expensereports`):
+  - `list` — `--user <ids>` (author filter) plus the shared list flags.
+  - `get <id>` — two-column detail view with named statuses.
+  - `create` — `--user` (required) `--date-start --date-end --validator --note-public
+    --note-private`, or `--from-json`. Echoes the created object.
+  - `update <id>` — only the flags you pass are sent; echoes the resulting state.
+  - `delete <id>` — confirmation prompt or `--confirm`.
+  - `set-status <id> --status draft|validated|approved|paid|refused|cancelled` (or a numeric
+    code) — confirmation-guarded; echoes the resulting state.
+  - `payments list` / `payments get <payment-id>` — read recorded payments.
+  - `payments add <id> --amount --date --payment-type [--account --num --note-public]` —
+    **⚠️ moves money.** Guarded: `--dry-run` previews the body and a confirmation (or
+    `--confirm`) is required. `--payment-type` accepts a code (`CB`, `VIR`, `LIQ`, …) or the
+    numeric dictionary id. The route and its required fields (`fk_typepayment`, `datepaid`,
+    `amounts`) were confirmed live, but a **completed payment could not be exercised
+    end-to-end** — Dolibarr only accepts one against an approved report. `--from-json` is
+    available if your instance expects a different `amounts` shape.
+  - `payments update <id>` — update the payment on a report.
+
+### Field/route quirks found live (worth knowing)
+
+- **Status is written through `fk_statut`, not `status`.** A `PUT` with `{"status": 2}` is
+  silently ignored; `{"fk_statut": 2}` works. `set-status` uses the field that works.
+- **`ref_ext` does not persist.** The `PUT` response echoes it back, but a re-`GET` still
+  reports `null` — so no `--ref-ext` flag is exposed on `update`.
+- **`create` needs a period.** `fk_user_author` alone returns a 500; pass `--date-start` and
+  `--date-end`.
+- **`set-status` is not Dolibarr's approval workflow.** No `/validate`, `/approve` or
+  `/setstatus` route exists on this resource, so the status is written directly: the draft
+  ref is *not* replaced (it stays `(PROVn)`), `date_valid`/`date_approve` are not stamped,
+  and no triggers fire. This is spelled out in `set-status --help`.
+
+### Not added (verified absent on Dolibarr 20.0.4)
+
+- **expense-report lines** — no `/expensereports/{id}/lines` route in any method
+  (route-stage 404), despite the roadmap listing them. Lines must be entered in the web UI.
+- **`validate` / `approve` subcommands** — no dedicated routes; `set-status` is the honest
+  equivalent and says so.
+- **ref-lookup** — no `/expensereports/ref/{ref}` route.
+
+### Changed
+
+- State-echoing mutations in both 0.4.x groups (`create`, `update`, `set-status`,
+  `validate`, `close`, `add-line`) now accept `--output`/`--json`/`--fields`, matching the
+  0.3.x groups, so the echoed post-write state can be projected or parsed. The human
+  confirmation line is suppressed in JSON mode to keep output parseable.
+
+### Tests
+
+- Added expense-report command-tree, body-builder, status-resolver and column tests.
+  Test total: 277 → 303.
+
 ## 0.4.0 - 2026-07-25
 
 New resource groups — line 0.4.x, part 1: **`interventions`**.
