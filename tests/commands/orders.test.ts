@@ -1,9 +1,11 @@
 import { describe, it, expect } from "vitest";
 import type { Command } from "commander";
 import {
+  buildOrderLineBody,
   buildOrderUpdateBody,
   createOrdersCommand,
   orderDetailFields,
+  ORDER_CONTACT_TYPES,
 } from "../../src/commands/orders.js";
 
 function sub(cmd: Command, name: string): Command | undefined {
@@ -50,5 +52,37 @@ describe("orders command", () => {
 
   it("exposes a delivery-date column in the detail fields", () => {
     expect(orderDetailFields.map((c) => c.key)).toContain("delivery_date");
+  });
+
+  it("registers the deep orders surface (v0.3.3)", () => {
+    for (const name of [
+      "update-line",
+      "delete-line",
+      "reopen",
+      "create-from-proposal",
+      "shipments",
+      "create-shipment",
+      "contacts",
+    ]) {
+      expect(sub(cmd, name), name).toBeDefined();
+    }
+  });
+
+  it("contacts subgroup exposes list/add/remove and the valid types", () => {
+    const grp = sub(cmd, "contacts")!;
+    for (const name of ["list", "add", "remove"]) expect(sub(grp, name), name).toBeDefined();
+    expect(ORDER_CONTACT_TYPES).toEqual(["BILLING", "SHIPPING", "CUSTOMER"]);
+  });
+
+  it("add-line now offers --product-type (order lines require an integer product_type)", () => {
+    expect(flags(sub(cmd, "add-line")!)).toContain("--product-type");
+  });
+
+  it("builds an order line body with product_type coercion", () => {
+    expect(buildOrderLineBody({ subprice: "30", qty: "2", productType: "1" })).toEqual({
+      subprice: 30,
+      qty: 2,
+      product_type: 1,
+    });
   });
 });

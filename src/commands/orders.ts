@@ -27,6 +27,22 @@ const STATUS_MAP: Record<string, string> = {
 const tsToDate = (v: unknown): string =>
   v ? new Date(Number(v) * 1000).toISOString().split("T")[0] : "";
 
+/** Build the PUT/POST body for an order line from parsed opts (only passed flags). */
+export function buildOrderLineBody(opts: Record<string, unknown>): Record<string, unknown> {
+  const body: Record<string, unknown> = {};
+  if (opts.desc !== undefined) body.desc = opts.desc;
+  if (opts.subprice !== undefined) body.subprice = Number(opts.subprice);
+  if (opts.qty !== undefined) body.qty = Number(opts.qty);
+  if (opts.tvaTx !== undefined) body.tva_tx = Number(opts.tvaTx);
+  if (opts.productId !== undefined) body.fk_product = Number(opts.productId);
+  if (opts.productType !== undefined) body.product_type = Number(opts.productType);
+  if (opts.remise !== undefined) body.remise_percent = Number(opts.remise);
+  return body;
+}
+
+/** Contact-type codes valid for linking a contact to an order. */
+export const ORDER_CONTACT_TYPES = ["BILLING", "SHIPPING", "CUSTOMER"] as const;
+
 /** Detail-view fields shared by `get` and the `update` state echo. */
 export const orderDetailFields: ColumnSpec[] = [
   { key: "id", label: "ID" },
@@ -237,6 +253,7 @@ export function createOrdersCommand(): Command {
     .requiredOption("--qty <n>", "Quantity")
     .requiredOption("--tva-tx <n>", "VAT rate (e.g., 20)")
     .option("--product-id <id>", "Product ID")
+    .option("--product-type <n>", "0=product, 1=service", "0")
     .action(async (id, opts) => {
       try {
         const body: Record<string, unknown> = {
@@ -244,6 +261,8 @@ export function createOrdersCommand(): Command {
           subprice: Number(opts.subprice),
           qty: Number(opts.qty),
           tva_tx: Number(opts.tvaTx),
+          // Dolibarr's order-line insert rejects an empty product_type; default to 0.
+          product_type: Number(opts.productType ?? 0),
         };
         if (opts.productId) body.fk_product = Number(opts.productId);
         if (dryRunJson("orders.addLine", { id, body })) return;
@@ -254,5 +273,190 @@ export function createOrdersCommand(): Command {
       } catch (err) { exitWithError(err, Boolean(opts.json)); }
     });
 
+  cmd
+    .command("update-line")
+    .description("Edit a line on a draft order (recomputes order totals)")
+    .argument("<id>", "Order ID")
+    .argument("<lineid>", "Line ID")
+    .option("--json", "Output as JSON")
+    .option("--desc <text>", "Line description")
+    .option("--subprice <n>", "Unit price excl. tax")
+    .option("--qty <n>", "Quantity")
+    .option("--tva-tx <n>", "VAT rate (e.g., 20)")
+    .option("--product-id <id>", "Product ID")
+    .option("--product-type <n>", "0=product, 1=service")
+    .option("--remise <n>", "Discount percentage")
+    .action(async (id, lineid, opts) => {
+      try {
+        const body = buildOrderLineBody(opts);
+        if (dryRunJson("orders.updateLine", { id, lineid, body })) return;
+        const client = createClient();
+        await client.put<unknown>(`orders/${id}/lines/${lineid}`, body);
+        if (opts.json) {
+          printJson(await client.get(`orders/${id}/lines`));
+          return;
+        }
+        printInfo(`Updated line ${lineid} on order ${id}`);
+        await echoState(client, `orders/${id}`, opts, orderDetailFields);
+      } catch (err) { exitWithError(err, Boolean(opts.json)); }
+    });
+
+  cmd
+    .command("delete-line")
+    .description("Delete a line from a draft order (recomputes order totals)")
+    .argument("<id>", "Order ID")
+    .argument("<lineid>", "Line ID")
+    .option("--confirm", "Skip confirmation prompt")
+    .option("--json", "Output as JSON")
+    .action(async (id, lineid, opts) => {
+      try {
+        if (!(await confirmOrCancel(`Delete line ${lineid} from order ${id}?`, opts))) return;
+        if (dryRunJson("orders.deleteLine", { id, lineid })) return;
+        const client = createClient();
+        await client.delete(`orders/${id}/lines/${lineid}`);
+        if (opts.json) { printJson({ deleted: lineid }); return; }
+        printInfo(`Deleted line ${lineid} from order ${id}`);
+      } catch (err) { exitWithError(err, Boolean(opts.json)); }
+    });
+
+  cmd
+    .command("reopen")
+    .description("Reopen a closed order")
+    .argument("<id>", "Order ID")
+    .option("--json", "Output as JSON")
+    .action(async (id, opts) => {
+      try {
+        if (dryRunJson("orders.reopen", { id })) return;
+        const client = createClient();
+        await client.post<unknown>(`orders/${id}/reopen`);
+        await echoState(client, `orders/${id}`, opts, orderDetailFields);
+      } catch (err) { exitWithError(err, Boolean(opts.json || opts.output === "json")); }
+    });
+
+  cmd
+    .command("create-from-proposal")
+    .description("Create an order from a commercial proposal")
+    .argument("<proposal-id>", "Source proposal ID")
+    .option("--json", "Output as JSON")
+    .action(async (proposalId, opts) => {
+      try {
+        if (dryRunJson("orders.createFromProposal", { proposalId })) return;
+        const client = createClient();
+        const result = await client.post<number>(`orders/createfromproposal/${proposalId}`);
+        if (opts.json) { printJson(result); return; }
+        printInfo(`Created order ${result} from proposal ${proposalId}.`);
+      } catch (err) { exitWithError(err, Boolean(opts.json)); }
+    });
+
+  addGetOptions(
+    cmd
+      .command("shipments")
+      .description("List shipments generated from an order")
+      .argument("<id>", "Order ID"),
+  )
+    .action(async (id, opts) => {
+      try {
+        const client = createClient();
+        const items = await client.get<Record<string, unknown>[]>(`orders/${id}/shipment`);
+        renderList(items, {
+          opts,
+          columns: [
+            { key: "id", label: "ID" },
+            { key: "ref", label: "Ref" },
+            { key: "date_delivery", label: "Delivery", format: (i) => tsToDate(i.date_delivery) },
+            { key: "status", label: "Status" },
+          ],
+        });
+      } catch (err) { exitWithError(err, Boolean(opts.json || opts.output === "json")); }
+    });
+
+  cmd
+    .command("create-shipment")
+    .description("Create a shipment from an order (requires the Shipments/Expedition module)")
+    .argument("<id>", "Order ID")
+    .argument("<warehouse-id>", "Source warehouse ID")
+    .option("--json", "Output as JSON")
+    .action(async (id, warehouseId, opts) => {
+      try {
+        if (dryRunJson("orders.createShipment", { id, warehouseId })) return;
+        const client = createClient();
+        const result = await client.post<number>(`orders/${id}/shipment/${warehouseId}`);
+        if (opts.json) { printJson(result); return; }
+        printInfo(`Created shipment ${result} from order ${id}.`);
+      } catch (err) { exitWithError(err, Boolean(opts.json)); }
+    });
+
+  cmd.addCommand(createOrderContactsCommand());
+
   return cmd;
+}
+
+/** `orders contacts` — list/add/remove linked contacts (orders expose a list route). */
+function createOrderContactsCommand(): Command {
+  const grp = new Command("contacts").description("List, link, or unlink contacts on an order");
+
+  addGetOptions(
+    grp
+      .command("list")
+      .description("List an order's linked contacts")
+      .argument("<id>", "Order ID"),
+  )
+    .option("--type <type>", "Filter by contact type")
+    .action(async (id, opts) => {
+      try {
+        const client = createClient();
+        const items = await client.get<Record<string, unknown>[]>(
+          `orders/${id}/contacts`,
+          opts.type ? { type: opts.type } : undefined,
+        );
+        renderList(items, {
+          opts,
+          columns: [
+            { key: "id", label: "ID" },
+            { key: "code", label: "Type code" },
+            { key: "libelle", label: "Type", format: (c) => String(c.libelle ?? c.code ?? "") },
+            { key: "firstname", label: "First name" },
+            { key: "lastname", label: "Last name" },
+          ],
+        });
+      } catch (err) { exitWithError(err, Boolean(opts.json || opts.output === "json")); }
+    });
+
+  grp
+    .command("add")
+    .description("Link a contact to an order")
+    .argument("<id>", "Order ID")
+    .argument("<contact-id>", "Contact ID")
+    .argument("[type]", `Contact type: ${ORDER_CONTACT_TYPES.join(" | ")}`, "BILLING")
+    .option("--json", "Output as JSON")
+    .action(async (id, contactId, type, opts) => {
+      try {
+        const t = String(type).toUpperCase();
+        if (dryRunJson("orders.contacts.add", { id, contactId, type: t })) return;
+        const client = createClient();
+        const result = await client.post<unknown>(`orders/${id}/contact/${contactId}/${t}`);
+        if (opts.json) { printJson(result); return; }
+        printInfo(`Linked contact ${contactId} to order ${id} as ${t}.`);
+      } catch (err) { exitWithError(err, Boolean(opts.json)); }
+    });
+
+  grp
+    .command("remove")
+    .description("Unlink a contact from an order")
+    .argument("<id>", "Order ID")
+    .argument("<contact-id>", "Contact ID")
+    .argument("[type]", `Contact type: ${ORDER_CONTACT_TYPES.join(" | ")}`, "BILLING")
+    .option("--json", "Output as JSON")
+    .action(async (id, contactId, type, opts) => {
+      try {
+        const t = String(type).toUpperCase();
+        if (dryRunJson("orders.contacts.remove", { id, contactId, type: t })) return;
+        const client = createClient();
+        await client.delete(`orders/${id}/contact/${contactId}/${t}`);
+        if (opts.json) { printJson({ removed: contactId }); return; }
+        printInfo(`Unlinked contact ${contactId} (${t}) from order ${id}.`);
+      } catch (err) { exitWithError(err, Boolean(opts.json)); }
+    });
+
+  return grp;
 }

@@ -106,6 +106,12 @@ dolibarr bank add-transaction 1 --date 2026-05-05 --type VIR --label "Bank fee" 
 dolibarr bank update-transaction 1 240 --label "Corrected label"   # only the label is API-editable
 dolibarr bank transfer --from 1 --to 2 --amount 100.00 --date 2026-05-05 --description "Internal transfer"
 
+# Customer orders
+dolibarr orders create-from-proposal 9
+dolibarr orders update-line 42 310 --qty 3        # edit a draft order line; totals recompute
+dolibarr orders contacts list 42
+dolibarr orders reopen 42
+
 # Thirdparty banking (RIB / SEPA / gateways)
 dolibarr thirdparties bank-accounts list 3
 dolibarr thirdparties bank-accounts create 3 --label Main --iban LU28... --bic BCEELULL --rum RUM-0001

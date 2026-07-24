@@ -1,5 +1,33 @@
 # Changelog
 
+## 0.3.3 - 2026-07-24
+
+Deep endpoint coverage — line 0.3.x, part 4: the orders sub-resource surface.
+
+### Added
+
+- **`orders update-line <id> <lineid>` / `orders delete-line <id> <lineid>`** — edit or
+  remove a draft order line; order totals recompute server-side and are echoed back.
+- **`orders reopen <id>`** — reopen a closed order.
+- **`orders create-from-proposal <proposal-id>`** — create an order from a proposal.
+- **`orders contacts list|add|remove`** — orders expose a real list-contacts route (unlike
+  invoices), so all three are available.
+- **`orders shipments <id>`** and **`orders create-shipment <id> <warehouse-id>`** — list
+  shipments generated from an order, or create one (requires the Shipments/Expedition
+  module on the instance).
+
+### Fixed
+
+- **`orders add-line` now works.** Dolibarr's order-line insert requires an integer
+  `product_type`; the command never sent it, so every `add-line` failed with "Incorrect
+  integer value: '' for column ... product_type." It now defaults to 0 and accepts
+  `--product-type` (0=product, 1=service). Verified live against Dolibarr 20.0.4.
+
+### Tests
+
+- Added orders deep-surface tests (line body builder + product_type, contacts subgroup,
+  new subcommand registration). Test total: 231 → 235.
+
 ## 0.3.2 - 2026-07-24
 
 Deep endpoint coverage — line 0.3.x, part 3: the invoices sub-resource surface, plus
