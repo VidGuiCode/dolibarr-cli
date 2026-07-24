@@ -250,6 +250,7 @@ export function createInvoicesCommand(): Command {
       "Payment mode: numeric dictionary id or code (CB, VIR, LIQ, CHQ, ...)",
     )
     .option("--amount <n>", "Payment amount")
+    .option("--close", "Mark fully-paid invoices as paid (closepaidinvoices=yes)")
     .option("--close-code <code>", "Close code")
     .option("--close-note <note>", "Close note")
     .option("--bank-account <id>", "Bank account ID")
@@ -257,8 +258,9 @@ export function createInvoicesCommand(): Command {
       try {
         const client = createClient();
         const body: Record<string, unknown> = {
-          datepaye: opts.date,
+          datepaye: toEpochSeconds(opts.date),
           paymentid: await resolvePaymentTypeId(client, opts.paymentType),
+          closepaidinvoices: opts.close ? "yes" : "no",
         };
         if (opts.amount) body.amount = Number(opts.amount);
         if (opts.closeCode) body.close_code = opts.closeCode;
@@ -415,5 +417,228 @@ export function createInvoicesCommand(): Command {
       } catch (err) { exitWithError(err, Boolean(opts.json || opts.output === "json")); }
     });
 
+  addGetOptions(
+    cmd
+      .command("payments")
+      .description("List payments registered on an invoice")
+      .argument("<id>", "Invoice ID"),
+  )
+    .action(async (id, opts) => {
+      try {
+        const client = createClient();
+        const payments = await client.get<Record<string, unknown>[]>(`invoices/${id}/payments`);
+        renderList(payments, {
+          opts,
+          columns: [
+            { key: "ref", label: "Ref" },
+            // The payments endpoint returns `date` as a "YYYY-MM-DD HH:MM:SS" string,
+            // not an epoch — show the date portion as-is.
+            { key: "date", label: "Date", format: (p) => String(p.date ?? "").slice(0, 10) },
+            { key: "type", label: "Type" },
+            { key: "amount", label: "Amount" },
+            { key: "num", label: "Num" },
+            { key: "fk_bank_line", label: "Bank line" },
+          ],
+        });
+      } catch (err) { exitWithError(err, Boolean(opts.json || opts.output === "json")); }
+    });
+
+  cmd
+    .command("create-from-order")
+    .description("Create a customer invoice from an existing order")
+    .argument("<order-id>", "Source order ID")
+    .option("--json", "Output as JSON")
+    .action(async (orderId, opts) => {
+      try {
+        if (dryRunJson("invoices.createFromOrder", { orderId })) return;
+        const client = createClient();
+        const result = await client.post<number>(`invoices/createfromorder/${orderId}`);
+        if (opts.json) { printJson(result); return; }
+        printInfo(`Created invoice ${result} from order ${orderId}.`);
+      } catch (err) { exitWithError(err, Boolean(opts.json)); }
+    });
+
+  addGetOptions(
+    cmd
+      .command("template")
+      .description("Get a template (recurring) invoice by ID")
+      .argument("<id>", "Template invoice ID"),
+  )
+    .action(async (id, opts) => {
+      try {
+        const client = createClient();
+        const item = await client.get<Record<string, unknown>>(`invoices/templates/${id}`);
+        renderGet(item, { opts, fields: invoiceDetailFields });
+      } catch (err) { exitWithError(err, Boolean(opts.json || opts.output === "json")); }
+    });
+
+  cmd.addCommand(createInvoiceContactsCommand());
+  cmd.addCommand(createInvoiceDiscountsCommand());
+  cmd.addCommand(createInvoiceCreditNotesCommand());
+
   return cmd;
+}
+
+/** Valid contact-type codes for linking a contact to an invoice. */
+export const INVOICE_CONTACT_TYPES = ["BILLING", "SHIPPING", "CUSTOMER"] as const;
+
+/** `invoices contacts` — link/unlink contacts. Dolibarr exposes no list route. */
+function createInvoiceContactsCommand(): Command {
+  const grp = new Command("contacts").description("Link or unlink contacts on an invoice");
+  grp.addHelpText(
+    "after",
+    "\nNote: Dolibarr's REST API has no endpoint to list an invoice's linked contacts;" +
+      "\nonly add and remove are available.",
+  );
+
+  grp
+    .command("add")
+    .description("Link a contact to an invoice")
+    .argument("<id>", "Invoice ID")
+    .argument("<contact-id>", "Contact ID")
+    .argument("[type]", `Contact type: ${INVOICE_CONTACT_TYPES.join(" | ")}`, "BILLING")
+    .option("--json", "Output as JSON")
+    .action(async (id, contactId, type, opts) => {
+      try {
+        const t = String(type).toUpperCase();
+        if (dryRunJson("invoices.contacts.add", { id, contactId, type: t })) return;
+        const client = createClient();
+        const result = await client.post<unknown>(`invoices/${id}/contact/${contactId}/${t}`);
+        if (opts.json) { printJson(result); return; }
+        printInfo(`Linked contact ${contactId} to invoice ${id} as ${t}.`);
+      } catch (err) { exitWithError(err, Boolean(opts.json)); }
+    });
+
+  grp
+    .command("remove")
+    .description("Unlink a contact from an invoice")
+    .argument("<id>", "Invoice ID")
+    .argument("<contact-id>", "Contact ID")
+    .argument("[type]", `Contact type: ${INVOICE_CONTACT_TYPES.join(" | ")}`, "BILLING")
+    .option("--json", "Output as JSON")
+    .action(async (id, contactId, type, opts) => {
+      try {
+        const t = String(type).toUpperCase();
+        if (dryRunJson("invoices.contacts.remove", { id, contactId, type: t })) return;
+        const client = createClient();
+        await client.delete(`invoices/${id}/contact/${contactId}/${t}`);
+        if (opts.json) { printJson({ removed: contactId }); return; }
+        printInfo(`Unlinked contact ${contactId} (${t}) from invoice ${id}.`);
+      } catch (err) { exitWithError(err, Boolean(opts.json)); }
+    });
+
+  return grp;
+}
+
+/** `invoices discounts` — available discounts + applying discounts / credit notes. */
+function createInvoiceDiscountsCommand(): Command {
+  const grp = new Command("discounts").description(
+    "List available discounts and apply discounts / credit notes to an invoice",
+  );
+
+  addGetOptions(
+    grp
+      .command("list")
+      .description("List discounts available on an invoice")
+      .argument("<id>", "Invoice ID"),
+  ).action(async (id, opts) => {
+    try {
+      const client = createClient();
+      const result = await client.get<unknown>(`invoices/${id}/discount`);
+      printJson(result);
+    } catch (err) { exitWithError(err, Boolean(opts.json || opts.output === "json")); }
+  });
+
+  grp
+    .command("apply")
+    .description("Apply an available fixed discount to an invoice")
+    .argument("<id>", "Invoice ID")
+    .argument("<discount-id>", "Discount (absolute) ID")
+    .option("--json", "Output as JSON")
+    .action(async (id, discountId, opts) => {
+      try {
+        if (dryRunJson("invoices.discounts.apply", { id, discountId })) return;
+        const client = createClient();
+        const result = await client.post<unknown>(`invoices/${id}/usediscount/${discountId}`);
+        if (opts.json) { printJson(result); return; }
+        printInfo(`Applied discount ${discountId} to invoice ${id}.`);
+      } catch (err) { exitWithError(err, Boolean(opts.json)); }
+    });
+
+  grp
+    .command("apply-credit-note")
+    .description("Apply an available credit note to an invoice")
+    .argument("<id>", "Invoice ID")
+    .argument("<discount-id>", "Credit-note discount ID")
+    .option("--json", "Output as JSON")
+    .action(async (id, discountId, opts) => {
+      try {
+        if (dryRunJson("invoices.discounts.applyCreditNote", { id, discountId })) return;
+        const client = createClient();
+        const result = await client.post<unknown>(`invoices/${id}/usecreditnote/${discountId}`);
+        if (opts.json) { printJson(result); return; }
+        printInfo(`Applied credit note ${discountId} to invoice ${id}.`);
+      } catch (err) { exitWithError(err, Boolean(opts.json)); }
+    });
+
+  return grp;
+}
+
+/** `invoices credit-notes` — list/create credit notes (type=2 invoices). */
+function createInvoiceCreditNotesCommand(): Command {
+  const grp = new Command("credit-notes").description("List and create credit notes");
+
+  addListOptions(
+    grp
+      .command("list")
+      .description("List credit notes (invoices of type 2)"),
+  )
+    .option("--thirdparty <id>", "Filter by thirdparty ID")
+    .action(async (opts) => {
+      try {
+        const client = createClient();
+        const items = await client.get<Record<string, unknown>[]>(
+          "invoices",
+          buildListQuery(opts, { type: 2, thirdparty_ids: opts.thirdparty }),
+        );
+        renderList(items, {
+          opts,
+          columns: [
+            { key: "id", label: "ID" },
+            { key: "ref", label: "Ref" },
+            { key: "socid", label: "Thirdparty" },
+            { key: "total_ttc", label: "Total TTC" },
+            {
+              key: "status",
+              label: "Status",
+              format: (i) => STATUS_MAP[String(i.status)] ?? String(i.status ?? ""),
+            },
+          ],
+        });
+      } catch (err) { exitWithError(err, Boolean(opts.json || opts.output === "json")); }
+    });
+
+  grp
+    .command("create")
+    .description("Create a credit note (type-2 invoice), optionally from a source invoice")
+    .requiredOption("--socid <id>", "Thirdparty ID")
+    .option("--source-invoice <id>", "Source invoice ID this credit note corrects")
+    .option("--date <date>", "Credit-note date (YYYY-MM-DD or epoch)")
+    .option("--note-public <text>", "Public note")
+    .option("--json", "Output as JSON")
+    .action(async (opts) => {
+      try {
+        const body: Record<string, unknown> = { socid: Number(opts.socid), type: 2 };
+        if (opts.sourceInvoice) body.fk_facture_source = Number(opts.sourceInvoice);
+        if (opts.date) body.date = toEpochSeconds(opts.date);
+        if (opts.notePublic) body.note_public = opts.notePublic;
+        if (dryRunJson("invoices.creditNotes.create", { body })) return;
+        const client = createClient();
+        const result = await client.post<number>("invoices", body);
+        if (opts.json) { printJson(result); return; }
+        printInfo(`Created credit note ${result}.`);
+      } catch (err) { exitWithError(err, Boolean(opts.json)); }
+    });
+
+  return grp;
 }

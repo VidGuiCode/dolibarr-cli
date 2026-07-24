@@ -224,13 +224,17 @@ export function createSupplierInvoicesCommand(): Command {
       "Payment mode: numeric dictionary id or code (CB, VIR, LIQ, CHQ, ...)",
     )
     .option("--amount <n>", "Payment amount")
+    .option("--close", "Mark fully-paid invoices as paid (closepaidinvoices=yes)")
     .option("--bank-account <id>", "Bank account ID")
     .action(async (id, opts) => {
       try {
         const client = createClient();
+        // The supplier-invoice payments endpoint expects `payment_mode_id`
+        // (the customer-invoice endpoint uses `paymentid`).
         const body: Record<string, unknown> = {
-          datepaye: opts.date,
-          paymentid: await resolvePaymentTypeId(client, opts.paymentType),
+          datepaye: toEpochSeconds(opts.date),
+          payment_mode_id: await resolvePaymentTypeId(client, opts.paymentType),
+          closepaidinvoices: opts.close ? "yes" : "no",
         };
         if (opts.amount) body.amount = Number(opts.amount);
         if (opts.bankAccount) body.accountid = Number(opts.bankAccount);

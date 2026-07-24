@@ -1,5 +1,43 @@
 # Changelog
 
+## 0.3.2 - 2026-07-24
+
+Deep endpoint coverage — line 0.3.x, part 3: the invoices sub-resource surface, plus
+payment-registration bug fixes surfaced while wiring `payments`.
+
+### Added
+
+- **`invoices payments <id>`** — list the payments registered on an invoice (ref, date,
+  type, amount, bank line).
+- **`invoices create-from-order <order-id>`** — create a customer invoice from an order
+  (`POST /invoices/createfromorder/{orderid}`).
+- **`invoices template <id>`** — fetch a template (recurring) invoice.
+- **`invoices contacts add|remove <id> <contact-id> [type]`** — link/unlink a contact
+  (`BILLING` default, `SHIPPING`, `CUSTOMER`). Dolibarr's REST API exposes no
+  list-contacts route, so only add/remove are provided (documented in `--help`).
+- **`invoices discounts list|apply|apply-credit-note`** — list available discounts and
+  apply a fixed discount or a credit note to an invoice.
+- **`invoices credit-notes list|create`** — list credit notes (type-2 invoices) or create
+  one, optionally against a `--source-invoice`.
+
+### Fixed
+
+- **`invoices pay` / `supplier-invoices pay` now actually register a payment.** Three bugs
+  fixed (all verified live against Dolibarr 20.0.4):
+  - `--date` was sent verbatim; Dolibarr's `datepaye` requires a Unix timestamp, so every
+    `YYYY-MM-DD` payment was rejected. Dates are now normalized via the shared date helper.
+  - `supplier-invoices pay` sent `paymentid`; the supplier endpoint requires
+    `payment_mode_id`, so supplier payments always failed with "`payment_mode_id` is
+    required." Fixed.
+  - Both now send `closepaidinvoices` (default `no`; new `--close` flag sets `yes`), which
+    the payments endpoint requires.
+
+### Tests
+
+- Added invoices deep-surface tests (payments/contacts/discounts/credit-notes
+  registration, contact types, `--close`) and a supplier-invoices `pay` flag test.
+  Test total: 226 → 231.
+
 ## 0.3.1 - 2026-07-24
 
 Deep endpoint coverage — line 0.3.x, part 2. Theme: banking edits (M2, the #2 functional

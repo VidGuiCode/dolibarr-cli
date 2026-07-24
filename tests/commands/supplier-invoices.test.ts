@@ -50,4 +50,8 @@ describe("supplier-invoices command", () => {
   it("exposes a due-date column in the detail fields", () => {
     expect(supplierInvoiceDetailFields.map((c) => c.key)).toContain("date_echeance");
   });
+
+  it("pay exposes --close (closepaidinvoices) after the payment_mode_id fix", () => {
+    expect(flags(sub(cmd, "pay")!)).toContain("--close");
+  });
 });

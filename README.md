@@ -89,6 +89,10 @@ dolibarr invoices validate 12
 dolibarr invoices pay 12 --amount 500.00 --date 2025-12-01 --payment-type CB   # or a numeric id
 dolibarr invoices unpay 12         # reverse a paid invoice back to unpaid
 dolibarr invoices set-draft 12     # send a validated invoice back to draft
+dolibarr invoices payments 12      # list payments on an invoice
+dolibarr invoices create-from-order 45
+dolibarr invoices credit-notes list
+dolibarr invoices contacts add 12 7 BILLING
 
 # Supplier invoices
 dolibarr supplier-invoices list --thirdparty 3

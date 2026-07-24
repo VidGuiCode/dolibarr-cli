@@ -5,6 +5,7 @@ import {
   buildInvoiceUpdateBody,
   createInvoicesCommand,
   invoiceDetailFields,
+  INVOICE_CONTACT_TYPES,
 } from "../../src/commands/invoices.js";
 
 function sub(cmd: Command, name: string): Command | undefined {
@@ -81,5 +82,36 @@ describe("invoices command", () => {
     expect(sub(cmd, "unpay")).toBeDefined();
     expect(sub(cmd, "set-draft")).toBeDefined();
     expect(flags(sub(cmd, "set-draft")!)).toContain("--warehouse");
+  });
+
+  it("registers the deep invoices surface (v0.3.2)", () => {
+    for (const name of [
+      "payments",
+      "create-from-order",
+      "template",
+      "contacts",
+      "discounts",
+      "credit-notes",
+    ]) {
+      expect(sub(cmd, name), name).toBeDefined();
+    }
+  });
+
+  it("contacts subgroup has add/remove and defines the valid link types", () => {
+    const grp = sub(cmd, "contacts")!;
+    expect(sub(grp, "add")).toBeDefined();
+    expect(sub(grp, "remove")).toBeDefined();
+    expect(INVOICE_CONTACT_TYPES).toEqual(["BILLING", "SHIPPING", "CUSTOMER"]);
+  });
+
+  it("discounts subgroup can apply discounts and credit notes", () => {
+    const grp = sub(cmd, "discounts")!;
+    expect(sub(grp, "list")).toBeDefined();
+    expect(sub(grp, "apply")).toBeDefined();
+    expect(sub(grp, "apply-credit-note")).toBeDefined();
+  });
+
+  it("pay exposes --close (closepaidinvoices)", () => {
+    expect(flags(sub(cmd, "pay")!)).toContain("--close");
   });
 });
