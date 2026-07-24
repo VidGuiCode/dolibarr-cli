@@ -12,6 +12,7 @@ import {
   renderGet,
   renderList,
 } from "../core/resource-helpers.js";
+import { toEpochSeconds } from "../core/dates.js";
 
 export function createProductsCommand(): Command {
   const cmd = new Command("products").description("Manage products and services");
@@ -218,7 +219,109 @@ export function createProductsCommand(): Command {
   cmd.addCommand(createProductPurchasePricesCommand());
   cmd.addCommand(createProductMultipricesCommand());
   cmd.addCommand(createProductPriceByQtyCommand());
+  cmd.addCommand(createProductStockMovementsCommand());
+  cmd.addCommand(createProductCorrectStockCommand());
 
+  return cmd;
+}
+
+/** Build the POST body for a stock movement / correction. */
+export function buildStockMovementBody(
+  productId: string,
+  opts: Record<string, unknown>,
+): Record<string, unknown> {
+  const body: Record<string, unknown> = {
+    product_id: Number(productId),
+    warehouse_id: Number(opts.warehouse),
+    qty: Number(opts.qty),
+  };
+  if (opts.type !== undefined) body.type = Number(opts.type);
+  if (opts.lot !== undefined) body.lot = opts.lot;
+  if (opts.label !== undefined) body.movementlabel = opts.label;
+  if (opts.code !== undefined) body.movementcode = opts.code;
+  if (opts.price !== undefined) body.price = Number(opts.price);
+  if (opts.date !== undefined) body.datem = toEpochSeconds(opts.date as string);
+  return body;
+}
+
+/** `products stock-movements` — list warehouse stock movements. */
+function createProductStockMovementsCommand(): Command {
+  const cmd = new Command("stock-movements").description("List warehouse stock movements");
+  addListOptions(cmd)
+    .option("--product <id>", "Filter by product ID")
+    .option("--warehouse <id>", "Filter by warehouse ID")
+    .action(async (opts) => {
+      try {
+        const filters: string[] = [];
+        if (opts.product) filters.push(`(t.fk_product:=:${Number(opts.product)})`);
+        if (opts.warehouse) filters.push(`(t.fk_entrepot:=:${Number(opts.warehouse)})`);
+        const sqlfilters = filters.length ? filters.join(" and ") : opts.filter;
+        const client = createClient();
+        const items = await client.get<Record<string, unknown>[]>(
+          "stockmovements",
+          buildListQuery({ ...opts, filter: sqlfilters }),
+        );
+        renderList(items, {
+          opts,
+          columns: [
+            { key: "id", label: "ID" },
+            { key: "fk_product", label: "Product", format: (i) => String(i.fk_product ?? i.product_id ?? "") },
+            { key: "fk_entrepot", label: "Warehouse", format: (i) => String(i.fk_entrepot ?? i.warehouse_id ?? "") },
+            { key: "qty", label: "Qty" },
+            { key: "type", label: "Type" },
+            { key: "label", label: "Label", format: (i) => String(i.label ?? i.movementlabel ?? "").slice(0, 40) },
+          ],
+        });
+      } catch (err) { exitWithError(err, Boolean(opts.json || opts.output === "json")); }
+    });
+  return cmd;
+}
+
+/**
+ * `products correct-stock` — record a stock movement to correct inventory.
+ *
+ * ⚠️ This MUTATES inventory levels. Built against the route-confirmed
+ * `POST /stockmovements` shape but NOT exercised against a live movement (the
+ * reference instance's API user lacks stock permissions → 403). It requires an
+ * explicit confirmation (or `--confirm`) and honors `--dry-run`.
+ */
+function createProductCorrectStockCommand(): Command {
+  const cmd = new Command("correct-stock")
+    .description("Record a stock movement to correct a product's inventory (MUTATES stock)")
+    .argument("<product-id>", "Product ID")
+    .requiredOption("--warehouse <id>", "Warehouse ID")
+    .requiredOption("--qty <n>", "Quantity delta (positive=in, negative=out)")
+    .option("--type <n>", "Movement type (0=input, 1=output, 2=transfer, 3=correction)")
+    .option("--lot <lot>", "Batch/lot number")
+    .option("--label <text>", "Movement label")
+    .option("--code <code>", "Movement code")
+    .option("--price <n>", "Unit price")
+    .option("--date <date>", "Movement date (YYYY-MM-DD or epoch)")
+    .option("--confirm", "Skip confirmation prompt")
+    .option("--json", "Output as JSON")
+    .addHelpText(
+      "after",
+      "\n⚠️  This changes real inventory levels via POST /stockmovements. Preview with" +
+        "\n--dry-run first. It was authored from the documented API shape and could not be" +
+        "\nexercised live on the reference instance (stock permission gated).",
+    );
+  cmd.action(async (productId, opts) => {
+    try {
+      const body = buildStockMovementBody(productId, opts);
+      if (dryRunJson("products.correctStock", { body })) return;
+      if (
+        !(await confirmOrCancel(
+          `Adjust stock of product ${productId} in warehouse ${opts.warehouse} by ${opts.qty}? This changes real inventory.`,
+          opts,
+        ))
+      )
+        return;
+      const client = createClient();
+      const result = await client.post<number>("stockmovements", body);
+      if (opts.json) { printJson(result); return; }
+      printInfo(`Recorded stock movement ${result} for product ${productId}.`);
+    } catch (err) { exitWithError(err, Boolean(opts.json)); }
+  });
   return cmd;
 }
 

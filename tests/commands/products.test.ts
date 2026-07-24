@@ -2,6 +2,7 @@ import { describe, it, expect } from "vitest";
 import type { Command } from "commander";
 import {
   buildPurchasePriceBody,
+  buildStockMovementBody,
   buildVariantBody,
   createProductsCommand,
 } from "../../src/commands/products.js";
@@ -79,6 +80,35 @@ describe("products command — pricing surface (v0.3.7)", () => {
       price_base_type: "HT",
       fourn_id: 3,
       ref_fourn: "SUP-9",
+    });
+  });
+});
+
+describe("products command — stock surface (v0.3.8)", () => {
+  const cmd = createProductsCommand();
+
+  it("registers stock-movements and correct-stock", () => {
+    expect(sub(cmd, "stock-movements")).toBeDefined();
+    expect(sub(cmd, "correct-stock")).toBeDefined();
+  });
+
+  it("correct-stock requires --confirm/prompt (it mutates inventory)", () => {
+    const cs = sub(cmd, "correct-stock")!;
+    const longs = cs.options.map((o) => o.long);
+    expect(longs).toContain("--confirm");
+    expect(longs).toContain("--warehouse");
+    expect(longs).toContain("--qty");
+  });
+
+  it("builds a stock-movement body (qty sign = in/out)", () => {
+    expect(
+      buildStockMovementBody("5", { warehouse: "1", qty: "-3", type: "3", label: "cycle count" }),
+    ).toEqual({
+      product_id: 5,
+      warehouse_id: 1,
+      qty: -3,
+      type: 3,
+      movementlabel: "cycle count",
     });
   });
 });

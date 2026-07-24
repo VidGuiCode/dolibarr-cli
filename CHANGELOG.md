@@ -1,5 +1,47 @@
 # Changelog
 
+## 0.3.8 - 2026-07-24
+
+Deep endpoint coverage — line 0.3.x, part 9 (final): **product stock & movements**.
+
+> ⚠️ **Module-gated / docs-sourced.** The Stock/Warehouse and Product routes return `403`
+> on the reference instance (routes exist — `api_stockmovements.class.php`,
+> `api_warehouses.class.php`, `api_products.class.php` — but the API user lacks stock
+> permissions). Built against the route-confirmed shape with structural tests; not
+> exercised live.
+
+### Added
+
+- **`products stock-movements`** — list warehouse stock movements (`--product`,
+  `--warehouse` filters map to `sqlfilters`).
+- **`products correct-stock <product-id> --warehouse --qty [...]`** — record a stock
+  movement to correct inventory via `POST /stockmovements` (`--type --lot --label --code
+  --price --date`).
+  - **⚠️ This mutates real inventory.** It is guarded: `--dry-run` previews the request
+    body, and a confirmation prompt (or `--confirm`) is required before the write — in a
+    non-interactive shell without `--confirm` it refuses to proceed. It was authored from
+    the documented `POST /stockmovements` shape and **could not be exercised live** because
+    the reference instance's API user lacks stock permissions.
+
+### Not added
+
+- **`productlot` (batch/serial) list/get/update** — no standalone product-lot REST route
+  exists on Dolibarr 20.0.4 (every candidate path returns 404/501). Lot/batch data flows
+  through the stock endpoints (`lot` on a stock movement, `includestockdata=2` on a product
+  read) instead.
+
+### Tests
+
+- Added products stock-surface tests (registration, `correct-stock` guard flags,
+  `buildStockMovementBody`). Test total: 257 → 260.
+
+### 0.3.x line complete
+
+This is the last release of the 0.3.x "deep endpoint coverage" line (0.3.0 → 0.3.8). The
+22 existing command groups now expose their practical sub-resource endpoints; `raw` is only
+needed for truly exotic paths. Next up: 0.4.x — new resource groups (interventions,
+expensereports, members, stock/warehouses, supplier-proposals, tasks/agenda, …).
+
 ## 0.3.7 - 2026-07-24
 
 Deep endpoint coverage — line 0.3.x, part 8: **product pricing**.
