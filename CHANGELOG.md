@@ -1,5 +1,29 @@
 # Changelog
 
+## 0.3.0 - 2026-07-24
+
+Deep endpoint coverage — line 0.3.x, part 1. Theme: editable `update` (M1, the #1
+functional gap from the agent usage report). Re-dating an invoice previously forced a
+delete-and-recreate; now it's a single `update`.
+
+### Added
+
+- **`invoices update` / `supplier-invoices update` / `orders update` are now genuinely editable.** In addition to the notes, you can edit the fields that a bookkeeping correction actually needs:
+  - `invoices update <id> --date --due-date --socid --cond-reglement --mode-reglement --ref-client --ref-ext --project`
+  - `supplier-invoices update <id> --date --due-date --socid --ref-supplier --cond-reglement --mode-reglement --project`
+  - `orders update <id> --date --delivery-date --socid --cond-reglement --mode-reglement --ref-client --project`
+  - Dates accept `YYYY-MM-DD` (or a raw epoch). **Only fields Dolibarr's header PUT actually persists were exposed** — verified live against Dolibarr 20.0.4. Notably the order date maps to `date_commande` (the `date` key is silently ignored on an order PUT) and the order delivery date maps to `delivery_date` (not `date_livraison`).
+- **`invoices update-line <id> <lineid>` / `invoices delete-line <id> <lineid>`.** Edit or remove a draft invoice line (`--desc --subprice --qty --tva-tx --product-id --remise`); the invoice totals recompute server-side and are echoed back. (Order and supplier-invoice line editing land in v0.3.3 / v0.3.4, where their line-endpoint field mapping is verified.)
+
+### Changed
+
+- **Mutations now echo the resulting server state.** After an `update` / `update-line`, the CLI re-fetches the object and prints its post-write state (honoring `--output`/`--json`/`--fields`), so a half-applied write is detectable rather than masked by an optimistic "Updated" message — an agent-safety guard from the usage report.
+- **Amount/total is intentionally not editable on the header `update`.** Writing `total_ht` directly desyncs the recomputed totals (verified live), so amounts are changed through line edits (`update-line`) instead. Documented in the command help and the API reference notes.
+
+### Tests
+
+- Added `invoices`, `supplier-invoices`, and `orders` command tests (update body builders, date-field mapping, amount-omission, update-line/delete-line registration). Test total: 201 → 216.
+
 ## 0.2.10 - 2026-07-24
 
 ### Fixed

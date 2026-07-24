@@ -9,10 +9,13 @@ import {
   buildListQuery,
   confirmOrCancel,
   dryRunJson,
+  echoState,
   renderGet,
   renderList,
+  type ColumnSpec,
 } from "../core/resource-helpers.js";
 import { resolvePaymentTypeId } from "../core/payment-types.js";
+import { toEpochSeconds } from "../core/dates.js";
 
 const STATUS_MAP: Record<string, string> = {
   "0": "Draft",
@@ -23,6 +26,66 @@ const STATUS_MAP: Record<string, string> = {
 
 const tsToDate = (v: unknown): string =>
   v ? new Date(Number(v) * 1000).toISOString().split("T")[0] : "";
+
+/** Detail-view fields shared by `get` and the `update` state echo. */
+export const invoiceDetailFields: ColumnSpec[] = [
+  { key: "id", label: "ID" },
+  { key: "ref", label: "Ref" },
+  { key: "socid", label: "Thirdparty ID" },
+  { key: "date", label: "Date", format: (i) => tsToDate(i.date) },
+  {
+    key: "date_lim_reglement",
+    label: "Due date",
+    format: (i) => tsToDate(i.date_lim_reglement),
+  },
+  { key: "cond_reglement_id", label: "Payment terms ID" },
+  { key: "mode_reglement_id", label: "Payment mode ID" },
+  { key: "ref_client", label: "Customer ref" },
+  { key: "total_ht", label: "Total HT" },
+  { key: "total_tva", label: "Total VAT" },
+  { key: "total_ttc", label: "Total TTC" },
+  {
+    key: "status",
+    label: "Status",
+    format: (i) => STATUS_MAP[String(i.status)] ?? String(i.status ?? ""),
+  },
+  { key: "note_public", label: "Note public" },
+];
+
+/**
+ * Build the PUT body for `invoices update` from parsed opts. Only flags actually
+ * passed become keys. Fields limited to those a Dolibarr header PUT genuinely
+ * persists (verified live against Dolibarr 20.0.4) — amount/total is deliberately
+ * NOT editable here because writing it directly desyncs the recomputed totals;
+ * change amounts via `update-line` instead.
+ */
+export function buildInvoiceUpdateBody(opts: Record<string, unknown>): Record<string, unknown> {
+  const body: Record<string, unknown> = {};
+  if (opts.date !== undefined) body.date = toEpochSeconds(opts.date as string);
+  if (opts.dueDate !== undefined)
+    body.date_lim_reglement = toEpochSeconds(opts.dueDate as string);
+  if (opts.socid !== undefined) body.socid = Number(opts.socid);
+  if (opts.condReglement !== undefined) body.cond_reglement_id = Number(opts.condReglement);
+  if (opts.modeReglement !== undefined) body.mode_reglement_id = Number(opts.modeReglement);
+  if (opts.refClient !== undefined) body.ref_client = opts.refClient;
+  if (opts.refExt !== undefined) body.ref_ext = opts.refExt;
+  if (opts.project !== undefined) body.fk_project = Number(opts.project);
+  if (opts.notePublic !== undefined) body.note_public = opts.notePublic;
+  if (opts.notePrivate !== undefined) body.note_private = opts.notePrivate;
+  return body;
+}
+
+/** Build the PUT/POST body for an invoice line from parsed opts (only passed flags). */
+export function buildInvoiceLineBody(opts: Record<string, unknown>): Record<string, unknown> {
+  const body: Record<string, unknown> = {};
+  if (opts.desc !== undefined) body.desc = opts.desc;
+  if (opts.subprice !== undefined) body.subprice = Number(opts.subprice);
+  if (opts.qty !== undefined) body.qty = Number(opts.qty);
+  if (opts.tvaTx !== undefined) body.tva_tx = Number(opts.tvaTx);
+  if (opts.productId !== undefined) body.fk_product = Number(opts.productId);
+  if (opts.remise !== undefined) body.remise_percent = Number(opts.remise);
+  return body;
+}
 
 export function createInvoicesCommand(): Command {
   const cmd = new Command("invoices").description("Manage customer invoices");
@@ -72,24 +135,7 @@ export function createInvoicesCommand(): Command {
       try {
         const client = createClient();
         const item = await client.getByRefOrId<Record<string, unknown>>("invoices", idOrRef);
-        renderGet(item, {
-          opts,
-          fields: [
-            { key: "id", label: "ID" },
-            { key: "ref", label: "Ref" },
-            { key: "socid", label: "Thirdparty ID" },
-            { key: "date", label: "Date", format: (i) => tsToDate(i.date) },
-            { key: "total_ht", label: "Total HT" },
-            { key: "total_tva", label: "Total VAT" },
-            { key: "total_ttc", label: "Total TTC" },
-            {
-              key: "status",
-              label: "Status",
-              format: (i) => STATUS_MAP[String(i.status)] ?? String(i.status ?? ""),
-            },
-            { key: "note_public", label: "Note public" },
-          ],
-        });
+        renderGet(item, { opts, fields: invoiceDetailFields });
       } catch (err) { exitWithError(err, Boolean(opts.json || opts.output === "json")); }
     });
 
@@ -130,26 +176,30 @@ export function createInvoicesCommand(): Command {
       } catch (err) { exitWithError(err, Boolean(opts.json)); }
     });
 
-  cmd
-    .command("update")
-    .description("Update a customer invoice")
-    .argument("<id>", "Invoice ID")
-    .option("--json", "Output as JSON")
+  addGetOptions(
+    cmd
+      .command("update")
+      .description("Update a customer invoice (date, thirdparty, terms, notes)")
+      .argument("<id>", "Invoice ID"),
+  )
+    .option("--date <date>", "Invoice date (YYYY-MM-DD or epoch)")
+    .option("--due-date <date>", "Payment due date (YYYY-MM-DD or epoch)")
+    .option("--socid <id>", "Thirdparty ID")
+    .option("--cond-reglement <id>", "Payment terms ID")
+    .option("--mode-reglement <id>", "Payment mode ID")
+    .option("--ref-client <ref>", "Customer reference")
+    .option("--ref-ext <ref>", "External reference")
+    .option("--project <id>", "Project ID")
     .option("--note-public <text>", "Public note")
     .option("--note-private <text>", "Private note")
     .action(async (id, opts) => {
       try {
-        const client = createClient();
-        const body: Record<string, unknown> = {};
-        if (opts.notePublic) body.note_public = opts.notePublic;
-        if (opts.notePrivate) body.note_private = opts.notePrivate;
-
+        const body = buildInvoiceUpdateBody(opts);
         if (dryRunJson("invoices.update", { id, body })) return;
-
-        const result = await client.put<unknown>(`invoices/${id}`, body);
-        if (opts.json) { printJson(result); return; }
-        printInfo(`Updated invoice ${id}`);
-      } catch (err) { exitWithError(err, Boolean(opts.json)); }
+        const client = createClient();
+        await client.put<unknown>(`invoices/${id}`, body);
+        await echoState(client, `invoices/${id}`, opts, invoiceDetailFields);
+      } catch (err) { exitWithError(err, Boolean(opts.json || opts.output === "json")); }
     });
 
   cmd
@@ -249,6 +299,51 @@ export function createInvoicesCommand(): Command {
         const result = await client.post<unknown>(`invoices/${id}/lines`, body);
         if (opts.json) { printJson(result); return; }
         printInfo(`Added line to invoice ${id}`);
+      } catch (err) { exitWithError(err, Boolean(opts.json)); }
+    });
+
+  cmd
+    .command("update-line")
+    .description("Edit a line on a draft invoice (recomputes invoice totals)")
+    .argument("<id>", "Invoice ID")
+    .argument("<lineid>", "Line ID")
+    .option("--json", "Output as JSON")
+    .option("--desc <text>", "Line description")
+    .option("--subprice <n>", "Unit price excl. tax")
+    .option("--qty <n>", "Quantity")
+    .option("--tva-tx <n>", "VAT rate (e.g., 20)")
+    .option("--product-id <id>", "Product ID")
+    .option("--remise <n>", "Discount percentage")
+    .action(async (id, lineid, opts) => {
+      try {
+        const body = buildInvoiceLineBody(opts);
+        if (dryRunJson("invoices.updateLine", { id, lineid, body })) return;
+        const client = createClient();
+        await client.put<unknown>(`invoices/${id}/lines/${lineid}`, body);
+        if (opts.json) {
+          printJson(await client.get(`invoices/${id}/lines`));
+          return;
+        }
+        printInfo(`Updated line ${lineid} on invoice ${id}`);
+        await echoState(client, `invoices/${id}`, opts, invoiceDetailFields);
+      } catch (err) { exitWithError(err, Boolean(opts.json)); }
+    });
+
+  cmd
+    .command("delete-line")
+    .description("Delete a line from a draft invoice (recomputes invoice totals)")
+    .argument("<id>", "Invoice ID")
+    .argument("<lineid>", "Line ID")
+    .option("--confirm", "Skip confirmation prompt")
+    .option("--json", "Output as JSON")
+    .action(async (id, lineid, opts) => {
+      try {
+        if (!(await confirmOrCancel(`Delete line ${lineid} from invoice ${id}?`, opts))) return;
+        if (dryRunJson("invoices.deleteLine", { id, lineid })) return;
+        const client = createClient();
+        await client.delete(`invoices/${id}/lines/${lineid}`);
+        if (opts.json) { printJson({ deleted: lineid }); return; }
+        printInfo(`Deleted line ${lineid} from invoice ${id}`);
       } catch (err) { exitWithError(err, Boolean(opts.json)); }
     });
 

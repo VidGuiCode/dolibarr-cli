@@ -1,4 +1,5 @@
 import type { Command } from "commander";
+import type { DolibarrApiClient } from "./api-client.js";
 import { ask } from "./prompt.js";
 import { printCsv, printInfo, printJson, printTable } from "./output.js";
 import { isDryRunEnabled } from "./runtime.js";
@@ -219,6 +220,23 @@ export function renderGet(
     f.format ? f.format(item) : stringifyField(item[f.key]),
   ]);
   printTable(rows, ["Field", "Value"]);
+}
+
+/**
+ * After a mutation, re-fetch the object and render its resulting state honoring
+ * `--output`/`--json`/`--fields`. Echoing the server's post-write view makes a
+ * half-applied write detectable by an agent (the printed state reflects what
+ * actually persisted, not the request body). Returns the fetched object.
+ */
+export async function echoState(
+  client: DolibarrApiClient,
+  getPath: string,
+  opts: Record<string, unknown>,
+  fields: ColumnSpec[],
+): Promise<Record<string, unknown>> {
+  const fresh = await client.get<Record<string, unknown>>(getPath);
+  renderGet(fresh, { opts, fields });
+  return fresh;
 }
 
 /**

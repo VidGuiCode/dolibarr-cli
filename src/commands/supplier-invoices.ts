@@ -9,10 +9,13 @@ import {
   buildListQuery,
   confirmOrCancel,
   dryRunJson,
+  echoState,
   renderGet,
   renderList,
+  type ColumnSpec,
 } from "../core/resource-helpers.js";
 import { resolvePaymentTypeId } from "../core/payment-types.js";
+import { toEpochSeconds } from "../core/dates.js";
 
 const STATUS_MAP: Record<string, string> = {
   "0": "Draft",
@@ -23,6 +26,47 @@ const STATUS_MAP: Record<string, string> = {
 
 const tsToDate = (v: unknown): string =>
   v ? new Date(Number(v) * 1000).toISOString().split("T")[0] : "";
+
+/** Detail-view fields shared by `get` and the `update` state echo. */
+export const supplierInvoiceDetailFields: ColumnSpec[] = [
+  { key: "id", label: "ID" },
+  { key: "ref", label: "Ref" },
+  { key: "ref_supplier", label: "Supplier Ref" },
+  { key: "socid", label: "Supplier ID" },
+  { key: "date", label: "Date", format: (i) => tsToDate(i.date) },
+  { key: "date_echeance", label: "Due date", format: (i) => tsToDate(i.date_echeance) },
+  { key: "cond_reglement_id", label: "Payment terms ID" },
+  { key: "mode_reglement_id", label: "Payment mode ID" },
+  { key: "total_ht", label: "Total HT" },
+  { key: "total_ttc", label: "Total TTC" },
+  {
+    key: "status",
+    label: "Status",
+    format: (i) => STATUS_MAP[String(i.status)] ?? String(i.status ?? ""),
+  },
+];
+
+/**
+ * Build the PUT body for `supplier-invoices update`. Only passed flags become keys.
+ * Fields limited to those a Dolibarr header PUT genuinely persists (verified live
+ * against Dolibarr 20.0.4). Amount/total is deliberately NOT editable here (writing
+ * it directly desyncs the recomputed totals).
+ */
+export function buildSupplierInvoiceUpdateBody(
+  opts: Record<string, unknown>,
+): Record<string, unknown> {
+  const body: Record<string, unknown> = {};
+  if (opts.date !== undefined) body.date = toEpochSeconds(opts.date as string);
+  if (opts.dueDate !== undefined) body.date_echeance = toEpochSeconds(opts.dueDate as string);
+  if (opts.socid !== undefined) body.socid = Number(opts.socid);
+  if (opts.refSupplier !== undefined) body.ref_supplier = opts.refSupplier;
+  if (opts.condReglement !== undefined) body.cond_reglement_id = Number(opts.condReglement);
+  if (opts.modeReglement !== undefined) body.mode_reglement_id = Number(opts.modeReglement);
+  if (opts.project !== undefined) body.fk_project = Number(opts.project);
+  if (opts.notePublic !== undefined) body.note_public = opts.notePublic;
+  if (opts.notePrivate !== undefined) body.note_private = opts.notePrivate;
+  return body;
+}
 
 export function createSupplierInvoicesCommand(): Command {
   const cmd = new Command("supplier-invoices").description("Manage supplier invoices");
@@ -72,23 +116,7 @@ export function createSupplierInvoicesCommand(): Command {
       try {
         const client = createClient();
         const item = await client.get<Record<string, unknown>>(`supplierinvoices/${id}`);
-        renderGet(item, {
-          opts,
-          fields: [
-            { key: "id", label: "ID" },
-            { key: "ref", label: "Ref" },
-            { key: "ref_supplier", label: "Supplier Ref" },
-            { key: "socid", label: "Supplier ID" },
-            { key: "date", label: "Date", format: (i) => tsToDate(i.date) },
-            { key: "total_ht", label: "Total HT" },
-            { key: "total_ttc", label: "Total TTC" },
-            {
-              key: "status",
-              label: "Status",
-              format: (i) => STATUS_MAP[String(i.status)] ?? String(i.status ?? ""),
-            },
-          ],
-        });
+        renderGet(item, { opts, fields: supplierInvoiceDetailFields });
       } catch (err) { exitWithError(err, Boolean(opts.json || opts.output === "json")); }
     });
 
@@ -128,27 +156,29 @@ export function createSupplierInvoicesCommand(): Command {
       } catch (err) { exitWithError(err, Boolean(opts.json)); }
     });
 
-  cmd
-    .command("update")
-    .description("Update a supplier invoice")
-    .argument("<id>", "Invoice ID")
-    .option("--json", "Output as JSON")
+  addGetOptions(
+    cmd
+      .command("update")
+      .description("Update a supplier invoice (date, supplier, ref, terms, notes)")
+      .argument("<id>", "Invoice ID"),
+  )
+    .option("--date <date>", "Invoice date (YYYY-MM-DD or epoch)")
+    .option("--due-date <date>", "Due date (YYYY-MM-DD or epoch)")
+    .option("--socid <id>", "Supplier thirdparty ID")
+    .option("--ref-supplier <ref>", "Supplier reference number")
+    .option("--cond-reglement <id>", "Payment terms ID")
+    .option("--mode-reglement <id>", "Payment mode ID")
+    .option("--project <id>", "Project ID")
     .option("--note-public <text>", "Public note")
     .option("--note-private <text>", "Private note")
-    .option("--ref-supplier <ref>", "Supplier reference number")
     .action(async (id, opts) => {
       try {
-        const client = createClient();
-        const body: Record<string, unknown> = {};
-        if (opts.notePublic) body.note_public = opts.notePublic;
-        if (opts.notePrivate) body.note_private = opts.notePrivate;
-        if (opts.refSupplier) body.ref_supplier = opts.refSupplier;
-
+        const body = buildSupplierInvoiceUpdateBody(opts);
         if (dryRunJson("supplier-invoices.update", { id, body })) return;
-        const result = await client.put<unknown>(`supplierinvoices/${id}`, body);
-        if (opts.json) { printJson(result); return; }
-        printInfo(`Updated supplier invoice ${id}`);
-      } catch (err) { exitWithError(err, Boolean(opts.json)); }
+        const client = createClient();
+        await client.put<unknown>(`supplierinvoices/${id}`, body);
+        await echoState(client, `supplierinvoices/${id}`, opts, supplierInvoiceDetailFields);
+      } catch (err) { exitWithError(err, Boolean(opts.json || opts.output === "json")); }
     });
 
   cmd

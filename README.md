@@ -83,12 +83,15 @@ dolibarr thirdparties create --name "Acme Corp" --supplier --dry-run
 dolibarr invoices list --status 2 --output json
 dolibarr invoices get 12
 dolibarr invoices get FA2501-0001            # look up by ref
+dolibarr invoices update 12 --date 2025-06-15 --socid 4 --due-date 2025-07-15   # re-date / re-assign
+dolibarr invoices update-line 12 34 --subprice 40 --qty 2   # edit a draft line; totals recompute
 dolibarr invoices validate 12
 dolibarr invoices pay 12 --amount 500.00 --date 2025-12-01 --payment-type CB   # or a numeric id
 
 # Supplier invoices
 dolibarr supplier-invoices list --thirdparty 3
 dolibarr supplier-invoices get 7
+dolibarr supplier-invoices update 7 --date 2025-03-01 --ref-supplier INV-2025-03   # re-date a purchase invoice
 
 # Bank
 dolibarr bank list
