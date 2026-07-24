@@ -1,5 +1,52 @@
 # Changelog
 
+## 0.4.2 - 2026-07-25
+
+New resource groups — line 0.4.x, part 3: **`members`** (+ subscriptions + member types).
+
+> ⚠️ **Module-gated / docs-sourced.** `/members` and `/subscriptions` return `403` and
+> `/memberstypes` returns `401` on the reference instance — the routes exist
+> (`api_members.class.php`, `api_subscriptions.class.php`, `api_memberstypes.class.php`) but
+> the API user lacks member permissions. Every path, method and required field below was
+> confirmed by probing the live router and its validator; the writes were **not exercised**.
+
+### Added
+
+- **`members`** command group (`/members`):
+  - `list` — `--type <id>` (member type) and `--category <id>` filters, plus the shared
+    list flags.
+  - `get <id>` — two-column detail view with named statuses.
+  - `by-thirdparty <id>` / `by-email <email>` / `by-barcode <barcode>` — the three
+    thirdparty-based lookups Dolibarr exposes (`/members/thirdparty/…`).
+  - `create` — `--lastname` and `--type` required, plus `--firstname --company --login
+    --email --phone --nature --socid --address --zip --town --country --public
+    --note-public --note-private`, or `--from-json`. Echoes the created object.
+  - `update <id>` — same field flags; only what you pass is sent. Echoes the result.
+  - `delete <id>` — confirmation prompt or `--confirm`.
+  - `categories <id>` — the categories a member belongs to.
+- **`members subscriptions`** — `list <member-id>`, `list-all` (across all members),
+  `get <subscription-id>`, `update <subscription-id>`, and
+  `add <member-id> --start --end --amount [--label]`.
+  - `add` **books a membership fee**, so it is guarded: `--dry-run` previews the body and a
+    confirmation (or `--confirm`) is required. The API's own validator confirmed all three
+    fields are mandatory (`start_date`, `end_date`, `amount`).
+- **`members types`** — full CRUD over `/memberstypes` (`list`, `get`, `create --label …`,
+  `update`, `delete --confirm`) with `--subscription --amount --duration --vote --note`.
+
+### Route findings (Dolibarr 20.0.4)
+
+- **Member types live at `/memberstypes`**, their own API class — not `/members/types` as
+  the older reference notes claimed. `/members/types` does still resolve (to a method inside
+  `api_members`), but `members types` uses the dedicated resource.
+- **No `/members/ref/{ref}`** route, so `get` takes a numeric ID; the `by-*` lookups cover
+  identifier-based access.
+- **Statuses are not a 0..n sequence**: `-2` excluded, `-1` resiliated, `0` draft,
+  `1` validated. Rendered as labels.
+
+### Tests
+
+- Added members command-tree, body-builder and column tests. Test total: 303 → 322.
+
 ## 0.4.1 - 2026-07-25
 
 New resource groups — line 0.4.x, part 2: **`expensereports`**.

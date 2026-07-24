@@ -191,6 +191,12 @@ dolibarr expensereports create --user 2 --date-start 2026-03-01 --date-end 2026-
 dolibarr expensereports set-status 4 --status approved --confirm
 dolibarr expensereports payments list
 
+# Members
+dolibarr members list --type 1
+dolibarr members by-email member@example.com
+dolibarr members subscriptions add 7 --start 2026-01-01 --end 2026-12-31 --amount 50
+dolibarr members types list
+
 # Raw API (escape hatch)
 dolibarr raw GET /thirdparties
 dolibarr raw POST /invoices --data '{"socid": 1}'
@@ -297,6 +303,7 @@ dolibarr thirdparties create --name "Test" --supplier --dry-run
 | `receptions` | Supplier receptions |
 | `interventions` | Interventions (fichinter) + time lines |
 | `expensereports` | Expense reports + payment tracking |
+| `members` | Members, subscriptions, member types |
 
 ## Development
 
