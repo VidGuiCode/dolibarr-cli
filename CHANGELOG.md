@@ -1,5 +1,38 @@
 # Changelog
 
+## 0.3.5 - 2026-07-24
+
+Deep endpoint coverage — line 0.3.x, part 6: thirdparty links, category ↔ object
+linking, contact categories, and extrafields read.
+
+### Added
+
+- **`thirdparties categories list|add|remove <id>`** — manage a thirdparty's customer (or,
+  with `--supplier`, supplier) categories.
+- **`thirdparties representatives list|add|remove <id>`** — manage a thirdparty's sales
+  representatives (`list --mode 0|1`).
+- **`thirdparties contacts <id>`** — list a thirdparty's contacts (empty when the
+  thirdparty has none, which Dolibarr signals with a 404 — handled).
+- **`categories link|unlink <id> <type> <object-id>`** — link/unlink any object
+  (customer, supplier, product, contact, member, project, …) to/from a category.
+- **`categories of-object <type> <object-id>`** — list the categories an object belongs to.
+- **`contacts categories <id>`** — list a contact's categories; `contacts list
+  --thirdparty <id>` filters by thirdparty.
+- **`setup extrafields [--type <elementtype>]`** — read custom (extra) field definitions,
+  optionally scoped to one element type (societe, contact, facture, commande, product, …).
+
+### Notes
+
+- **Accounting stays export-only.** The instance's REST API exposes only
+  `accountancy/exportdata` (wrapped by `accounting ledger`); the chart-of-accounts,
+  journals, and bookkeeping endpoints return no route on Dolibarr 20.0.4, so no
+  `accounting accounts/journals` commands were added. Use `accounting ledger` for export
+  and `raw` for anything else.
+
+### Tests
+
+- Added categories, contacts, and thirdparty-links tests. Test total: 243 → 249.
+
 ## 0.3.4 - 2026-07-24
 
 Deep endpoint coverage — line 0.3.x, part 5: proposals + supplier-side deep, and a

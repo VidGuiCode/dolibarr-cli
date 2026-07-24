@@ -191,5 +191,67 @@ export function createCategoriesCommand(): Command {
       } catch (err) { exitWithError(err, Boolean(opts.json || opts.output === "json")); }
     });
 
+  cmd
+    .command("link")
+    .description("Link an object to a category")
+    .argument("<id>", "Category ID")
+    .argument("<type>", "Object type (product, customer, supplier, contact, member, project, ...)")
+    .argument("<object-id>", "Object ID")
+    .option("--json", "Output as JSON")
+    .action(async (id, type, objectId, opts) => {
+      try {
+        if (dryRunJson("categories.link", { id, type, objectId })) return;
+        const client = createClient();
+        const result = await client.post<unknown>(`categories/${id}/objects/${type}/${objectId}`);
+        if (opts.json) { printJson(result); return; }
+        printInfo(`Linked ${type} ${objectId} to category ${id}.`);
+      } catch (err) { exitWithError(err, Boolean(opts.json)); }
+    });
+
+  cmd
+    .command("unlink")
+    .description("Unlink an object from a category")
+    .argument("<id>", "Category ID")
+    .argument("<type>", "Object type (product, customer, supplier, contact, member, project, ...)")
+    .argument("<object-id>", "Object ID")
+    .option("--json", "Output as JSON")
+    .action(async (id, type, objectId, opts) => {
+      try {
+        if (dryRunJson("categories.unlink", { id, type, objectId })) return;
+        const client = createClient();
+        await client.delete(`categories/${id}/objects/${type}/${objectId}`);
+        if (opts.json) { printJson({ unlinked: objectId }); return; }
+        printInfo(`Unlinked ${type} ${objectId} from category ${id}.`);
+      } catch (err) { exitWithError(err, Boolean(opts.json)); }
+    });
+
+  addGetOptions(
+    cmd
+      .command("of-object")
+      .description("List the categories a given object belongs to")
+      .argument("<type>", "Object type (product, customer, supplier, contact, member, project, ...)")
+      .argument("<object-id>", "Object ID"),
+  )
+    .action(async (type, objectId, opts) => {
+      try {
+        const client = createClient();
+        const items = await client.get<Record<string, unknown>[]>(
+          `categories/object/${type}/${objectId}`,
+        );
+        renderList(items, {
+          opts,
+          columns: [
+            { key: "id", label: "ID" },
+            { key: "label", label: "Label" },
+            {
+              key: "type",
+              label: "Type",
+              format: (i) => TYPE_MAP[String(i.type)] ?? String(i.type ?? ""),
+            },
+          ],
+        });
+      } catch (err) { exitWithError(err, Boolean(opts.json || opts.output === "json")); }
+    });
+
   return cmd;
 }

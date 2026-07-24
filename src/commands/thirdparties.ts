@@ -268,6 +268,39 @@ export function createThirdpartiesCommand(): Command {
 
   cmd.addCommand(createThirdpartyBankAccountsCommand());
   cmd.addCommand(createThirdpartyGatewaysCommand());
+  cmd.addCommand(createThirdpartyCategoriesCommand());
+  cmd.addCommand(createThirdpartyRepresentativesCommand());
+
+  addGetOptions(
+    cmd
+      .command("contacts")
+      .description("List a thirdparty's contacts")
+      .argument("<id>", "Thirdparty ID"),
+  )
+    .action(async (id, opts) => {
+      try {
+        const client = createClient();
+        let items: Record<string, unknown>[] = [];
+        try {
+          items = await client.get<Record<string, unknown>[]>("contacts", {
+            thirdparty_ids: id,
+          });
+        } catch (err) {
+          // Dolibarr's contacts filter 404s when the thirdparty has no contacts.
+          if (!(err instanceof DolibarrApiError && err.status === 404)) throw err;
+        }
+        renderList(items, {
+          opts,
+          columns: [
+            { key: "id", label: "ID" },
+            { key: "lastname", label: "Lastname" },
+            { key: "firstname", label: "Firstname" },
+            { key: "email", label: "Email" },
+            { key: "phone_pro", label: "Phone" },
+          ],
+        });
+      } catch (err) { exitWithError(err, Boolean(opts.json || opts.output === "json")); }
+    });
 
   addGetOptions(
     cmd
@@ -472,6 +505,146 @@ function createThirdpartyGatewaysCommand(): Command {
         await client.delete(`thirdparties/${id}/accounts/${encodeURIComponent(site)}`);
         if (opts.json) { printJson({ deleted: site }); return; }
         printInfo(`Deleted gateway account "${site}" from thirdparty ${id}.`);
+      } catch (err) { exitWithError(err, Boolean(opts.json)); }
+    });
+
+  return grp;
+}
+
+/** `thirdparties categories` — link/unlink a thirdparty to customer or supplier categories. */
+function createThirdpartyCategoriesCommand(): Command {
+  const grp = new Command("categories").description(
+    "List, add, or remove a thirdparty's categories (use --supplier for supplier categories)",
+  );
+
+  const path = (id: string, supplier: boolean): string =>
+    `thirdparties/${id}/${supplier ? "supplier_categories" : "categories"}`;
+
+  addListOptions(
+    grp
+      .command("list")
+      .description("List a thirdparty's categories")
+      .argument("<id>", "Thirdparty ID"),
+  )
+    .option("--supplier", "Use supplier categories instead of customer categories")
+    .action(async (id, opts) => {
+      try {
+        const client = createClient();
+        const items = await client.get<Record<string, unknown>[]>(
+          path(id, Boolean(opts.supplier)),
+          buildListQuery(opts),
+        );
+        renderList(items, {
+          opts,
+          columns: [
+            { key: "id", label: "ID" },
+            { key: "label", label: "Label" },
+            { key: "description", label: "Description" },
+          ],
+        });
+      } catch (err) { exitWithError(err, Boolean(opts.json || opts.output === "json")); }
+    });
+
+  grp
+    .command("add")
+    .description("Add a thirdparty to a category")
+    .argument("<id>", "Thirdparty ID")
+    .argument("<category-id>", "Category ID")
+    .option("--supplier", "Use supplier categories")
+    .option("--json", "Output as JSON")
+    .action(async (id, categoryId, opts) => {
+      try {
+        if (dryRunJson("thirdparties.categories.add", { id, categoryId, supplier: Boolean(opts.supplier) }))
+          return;
+        const client = createClient();
+        await client.put<unknown>(`${path(id, Boolean(opts.supplier))}/${categoryId}`);
+        if (opts.json) { printJson({ added: categoryId }); return; }
+        printInfo(`Added thirdparty ${id} to category ${categoryId}.`);
+      } catch (err) { exitWithError(err, Boolean(opts.json)); }
+    });
+
+  grp
+    .command("remove")
+    .description("Remove a thirdparty from a category")
+    .argument("<id>", "Thirdparty ID")
+    .argument("<category-id>", "Category ID")
+    .option("--supplier", "Use supplier categories")
+    .option("--json", "Output as JSON")
+    .action(async (id, categoryId, opts) => {
+      try {
+        if (dryRunJson("thirdparties.categories.remove", { id, categoryId, supplier: Boolean(opts.supplier) }))
+          return;
+        const client = createClient();
+        await client.delete(`${path(id, Boolean(opts.supplier))}/${categoryId}`);
+        if (opts.json) { printJson({ removed: categoryId }); return; }
+        printInfo(`Removed thirdparty ${id} from category ${categoryId}.`);
+      } catch (err) { exitWithError(err, Boolean(opts.json)); }
+    });
+
+  return grp;
+}
+
+/** `thirdparties representatives` — list/add/remove sales representatives. */
+function createThirdpartyRepresentativesCommand(): Command {
+  const grp = new Command("representatives").description(
+    "List, add, or remove a thirdparty's sales representatives",
+  );
+
+  addGetOptions(
+    grp
+      .command("list")
+      .description("List a thirdparty's sales representatives")
+      .argument("<id>", "Thirdparty ID"),
+  )
+    .option("--mode <n>", "0=internal users, 1=external", "0")
+    .action(async (id, opts) => {
+      try {
+        const client = createClient();
+        const items = await client.get<Record<string, unknown>[]>(
+          `thirdparties/${id}/representatives`,
+          { mode: opts.mode },
+        );
+        renderList(items, {
+          opts,
+          columns: [
+            { key: "id", label: "ID" },
+            { key: "login", label: "Login" },
+            { key: "lastname", label: "Lastname" },
+            { key: "firstname", label: "Firstname" },
+          ],
+        });
+      } catch (err) { exitWithError(err, Boolean(opts.json || opts.output === "json")); }
+    });
+
+  grp
+    .command("add")
+    .description("Assign a sales representative to a thirdparty")
+    .argument("<id>", "Thirdparty ID")
+    .argument("<rep-id>", "Representative (user) ID")
+    .option("--json", "Output as JSON")
+    .action(async (id, repId, opts) => {
+      try {
+        if (dryRunJson("thirdparties.representatives.add", { id, repId })) return;
+        const client = createClient();
+        await client.post<unknown>(`thirdparties/${id}/representative/${repId}`);
+        if (opts.json) { printJson({ added: repId }); return; }
+        printInfo(`Assigned representative ${repId} to thirdparty ${id}.`);
+      } catch (err) { exitWithError(err, Boolean(opts.json)); }
+    });
+
+  grp
+    .command("remove")
+    .description("Remove a sales representative from a thirdparty")
+    .argument("<id>", "Thirdparty ID")
+    .argument("<rep-id>", "Representative (user) ID")
+    .option("--json", "Output as JSON")
+    .action(async (id, repId, opts) => {
+      try {
+        if (dryRunJson("thirdparties.representatives.remove", { id, repId })) return;
+        const client = createClient();
+        await client.delete(`thirdparties/${id}/representative/${repId}`);
+        if (opts.json) { printJson({ removed: repId }); return; }
+        printInfo(`Removed representative ${repId} from thirdparty ${id}.`);
       } catch (err) { exitWithError(err, Boolean(opts.json)); }
     });
 

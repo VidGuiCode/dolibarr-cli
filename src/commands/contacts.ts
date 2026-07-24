@@ -21,12 +21,13 @@ export function createContactsCommand(): Command {
       .command("list")
       .description("List contacts"),
   )
+    .option("--thirdparty <id>", "Filter by thirdparty ID")
     .action(async (opts) => {
       try {
         const client = createClient();
         const items = await client.get<Record<string, unknown>[]>(
           "contacts",
-          buildListQuery(opts),
+          buildListQuery(opts, { thirdparty_ids: opts.thirdparty }),
         );
         renderList(items, {
           opts,
@@ -148,6 +149,32 @@ export function createContactsCommand(): Command {
         if (opts.json) { printJson({ deleted: id }); return; }
         printInfo(`Deleted contact ${id}`);
       } catch (err) { exitWithError(err, Boolean(opts.json)); }
+    });
+
+  addGetOptions(
+    cmd
+      .command("categories")
+      .description("List the categories a contact belongs to")
+      .argument("<id>", "Contact ID"),
+  )
+    .addHelpText(
+      "after",
+      "\nTo add/remove a contact to/from a category, use:" +
+        "\n  dolibarr categories link|unlink <category-id> contact <contact-id>",
+    )
+    .action(async (id, opts) => {
+      try {
+        const client = createClient();
+        const items = await client.get<Record<string, unknown>[]>(`contacts/${id}/categories`);
+        renderList(items, {
+          opts,
+          columns: [
+            { key: "id", label: "ID" },
+            { key: "label", label: "Label" },
+            { key: "description", label: "Description" },
+          ],
+        });
+      } catch (err) { exitWithError(err, Boolean(opts.json || opts.output === "json")); }
     });
 
   return cmd;

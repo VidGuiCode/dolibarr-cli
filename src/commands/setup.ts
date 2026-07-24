@@ -75,5 +75,25 @@ export function createSetupCommand(): Command {
       } catch (err) { exitWithError(err, Boolean(opts.json)); }
     });
 
+  cmd
+    .command("extrafields")
+    .description("List custom (extra) fields, optionally for one element type")
+    .option(
+      "--type <elementtype>",
+      "Filter by element type (e.g. societe, contact, facture, commande, product, projet)",
+    )
+    .option("--json", "Output as JSON")
+    .action(async (opts) => {
+      try {
+        const client = createClient();
+        const result = await client.get<unknown>(
+          "setup/extrafields",
+          opts.type ? { elementtype: opts.type } : undefined,
+        );
+        // Dolibarr returns extrafields grouped by element type; JSON is the useful shape.
+        printJson(result);
+      } catch (err) { exitWithError(err, Boolean(opts.json)); }
+    });
+
   return cmd;
 }

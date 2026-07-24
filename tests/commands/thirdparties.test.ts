@@ -23,6 +23,17 @@ describe("thirdparties command", () => {
     expect(sub(cmd, "outstanding")).toBeDefined();
   });
 
+  it("registers categories, representatives and contacts (v0.3.5)", () => {
+    expect(sub(cmd, "categories")).toBeDefined();
+    expect(sub(cmd, "representatives")).toBeDefined();
+    expect(sub(cmd, "contacts")).toBeDefined();
+  });
+
+  it("categories subgroup has list/add/remove", () => {
+    const grp = sub(cmd, "categories")!;
+    for (const name of ["list", "add", "remove"]) expect(sub(grp, name), name).toBeDefined();
+  });
+
   it("bank-accounts subgroup has list/create/update/delete", () => {
     const grp = sub(cmd, "bank-accounts")!;
     for (const name of ["list", "create", "update", "delete"]) {

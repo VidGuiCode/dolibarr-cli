@@ -112,6 +112,13 @@ dolibarr orders update-line 42 310 --qty 3        # edit a draft order line; tot
 dolibarr orders contacts list 42
 dolibarr orders reopen 42
 
+# Categories & links
+dolibarr categories link 12 customer 3        # link thirdparty 3 to category 12
+dolibarr categories of-object customer 3      # categories a thirdparty belongs to
+dolibarr thirdparties categories list 3
+dolibarr thirdparties representatives add 3 8
+dolibarr setup extrafields --type societe
+
 # Supplier orders (path fixed in v0.3.4)
 dolibarr supplier-orders list
 dolibarr supplier-orders make-order 8 --date 2025-06-15
