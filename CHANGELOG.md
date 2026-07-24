@@ -1,6 +1,15 @@
 # Changelog
 
-## 0.2.9 - 2026-07-24
+## 0.2.10 - 2026-07-24
+
+### Fixed
+
+- **`dolibarr upgrade install` no longer fails with `spawn npm ENOENT` on Windows.** The installer now spawns `npm` through the platform shell, so Windows resolves the `npm.cmd` launcher (recent Node also refuses to spawn `.cmd` files without a shell). Self-update now works on Windows, macOS, and Linux — previously every Windows user had to fall back to a manual `npm install -g <url>`.
+- **`dolibarr upgrade` (bare) now reflects new releases immediately.** It performs a best-effort live check against GitHub (falling back to the cached result when offline) instead of only reading a cache that could be stale right after a release — which made a freshly published version show as "you are ahead of the latest published release."
+
+### Tests
+
+- Added `npmInstallSpawn` tests asserting the global-install args and the `shell: true` option that fixes the Windows ENOENT. Test total: 199 → 201.
 
 ### Added
 

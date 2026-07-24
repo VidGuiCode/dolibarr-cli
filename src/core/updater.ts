@@ -91,6 +91,28 @@ export async function fetchLatestRelease(
   }
 }
 
+/**
+ * Build the spawn arguments for the global npm install of a release asset.
+ *
+ * `shell: true` is required: on Windows the `npm` launcher is `npm.cmd`, and
+ * `child_process.spawn("npm", …)` without a shell fails with `ENOENT` (and recent
+ * Node refuses to spawn `.cmd`/`.bat` files unless a shell is used). Running through
+ * the shell resolves the platform launcher on Windows, macOS, and Linux alike.
+ * The asset URL is a controlled value from our own GitHub releases (no shell
+ * metacharacters), so it is safe to pass through the shell.
+ */
+export function npmInstallSpawn(assetUrl: string): {
+  command: string;
+  args: string[];
+  options: { stdio: "inherit"; shell: true };
+} {
+  return {
+    command: "npm",
+    args: ["install", "-g", assetUrl],
+    options: { stdio: "inherit", shell: true },
+  };
+}
+
 export function readCache(): UpdateCache | null {
   return readJson<UpdateCache>(getUpdateCachePath());
 }

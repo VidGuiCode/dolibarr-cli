@@ -33,10 +33,12 @@ npm link
 Once installed, the CLI can upgrade itself from GitHub Releases:
 
 ```bash
-dolibarr upgrade           # show installed + latest version
-dolibarr upgrade check     # fetch the latest release info from GitHub
+dolibarr upgrade           # show installed + latest version (checks GitHub live)
+dolibarr upgrade check     # fetch + cache the latest release info from GitHub
 dolibarr upgrade install   # download + install the latest .tgz via npm install -g
 ```
+
+`dolibarr upgrade` performs a best-effort live check against GitHub and falls back to the last cached result when offline, so "Latest" reflects new releases immediately. Self-update works on Windows, macOS, and Linux (the installer runs through the platform shell so `npm.cmd` resolves correctly on Windows).
 
 Every `dolibarr` command also prints a one-line reminder to **stderr** when a newer version is available (cache refreshed at most once every 24h). The reminder is suppressed automatically for piped / `--json` / non-TTY output, and can be turned off entirely:
 

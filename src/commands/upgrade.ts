@@ -4,6 +4,7 @@ import { Command } from "commander";
 import {
   compareVersions,
   fetchLatestRelease,
+  npmInstallSpawn,
   readCache,
   writeCache,
 } from "../core/updater.js";
@@ -15,14 +16,30 @@ import { isNonInteractiveMode } from "../core/runtime.js";
 const require = createRequire(import.meta.url);
 const pkg = require("../../package.json") as { version: string };
 
-function showStatus(): void {
-  const cache = readCache();
+async function showStatus(): Promise<void> {
   const current = pkg.version;
   printInfo(`Installed: v${current}`);
 
+  // Best-effort live refresh so "Latest" reflects releases published since the last
+  // `upgrade check`. Falls back to the cached value when GitHub is unreachable so the
+  // command still works offline.
+  let cache = readCache();
+  try {
+    const latest = await fetchLatestRelease();
+    cache = {
+      lastCheck: new Date().toISOString(),
+      latestVersion: latest.version,
+      currentVersion: current,
+      assetUrl: latest.assetUrl,
+    };
+    writeCache(cache);
+  } catch {
+    // Offline or GitHub unreachable — keep whatever was cached.
+  }
+
   if (!cache) {
     printInfo("Latest:    (not checked yet)");
-    printInfo("\nRun `dolibarr upgrade check` to fetch the latest release from GitHub.");
+    printInfo("\nCould not reach GitHub. Retry `dolibarr upgrade check` when online.");
     return;
   }
 
@@ -114,9 +131,8 @@ async function runInstall(): Promise<void> {
   }
 
   const exitCode = await new Promise<number>((resolve) => {
-    const child = spawn("npm", ["install", "-g", cache!.assetUrl!], {
-      stdio: "inherit",
-    });
+    const { command, args, options } = npmInstallSpawn(cache!.assetUrl!);
+    const child = spawn(command, args, options);
     child.on("error", (err) => {
       printError(`Failed to invoke npm: ${err.message}`);
       resolve(1);
@@ -146,9 +162,9 @@ async function runInstall(): Promise<void> {
 export function createUpgradeCommand(): Command {
   const cmd = new Command("upgrade")
     .description("Check for and install dolibarr-cli updates from GitHub Releases")
-    .action(() => {
+    .action(async () => {
       try {
-        showStatus();
+        await showStatus();
       } catch (err) {
         exitWithError(err);
       }

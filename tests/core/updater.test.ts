@@ -8,6 +8,7 @@ import {
   isCacheStale,
   isOutdated,
   normalizeVersion,
+  npmInstallSpawn,
   readCache,
   writeCache,
   type UpdateCache,
@@ -496,5 +497,24 @@ describe("ensureFreshCacheOnColdStart", () => {
 
     expect(fetchSpy).not.toHaveBeenCalled();
     expect(readCache()).toEqual(existing);
+  });
+});
+
+describe("npmInstallSpawn", () => {
+  const url =
+    "https://github.com/VidGuiCode/dolibarr-cli/releases/download/v0.2.10/dolibarr-cli-0.2.10.tgz";
+
+  it("targets a global npm install of the asset url", () => {
+    const { command, args } = npmInstallSpawn(url);
+    expect(command).toBe("npm");
+    expect(args).toEqual(["install", "-g", url]);
+  });
+
+  it("uses a shell so npm.cmd resolves on Windows (fixes spawn ENOENT)", () => {
+    // Without shell:true, spawn("npm", …) fails with ENOENT on Windows because the
+    // launcher is npm.cmd. This is the core of the v0.2.10 fix.
+    const { options } = npmInstallSpawn(url);
+    expect(options.shell).toBe(true);
+    expect(options.stdio).toBe("inherit");
   });
 });
