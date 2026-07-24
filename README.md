@@ -132,9 +132,17 @@ dolibarr receptions close 3
 
 # Raw API (escape hatch)
 dolibarr raw GET /thirdparties
-dolibarr raw POST /invoices --body '{"socid": 1}'
-dolibarr raw PUT /thirdparties/5 --body '{"fournisseur": 1}'
+dolibarr raw POST /invoices --data '{"socid": 1}'
+dolibarr raw PUT /thirdparties/5 --data '{"fournisseur": 1}'
+dolibarr raw POST /invoices --data-file body.json
 ```
+
+> **Windows / Git Bash (MSYS) note:** Git Bash rewrites a leading-slash argument
+> like `/thirdparties` into a Windows path (`C:/Program Files/Git/thirdparties`)
+> before the CLI ever sees it, which Dolibarr rejects. The CLI now detects and
+> un-mangles this automatically (printing a one-line notice). To avoid it entirely,
+> either drop the leading slash (`dolibarr raw GET thirdparties`) or set
+> `MSYS_NO_PATHCONV=1` for the session.
 
 ## Output Formats
 

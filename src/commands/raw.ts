@@ -1,14 +1,15 @@
 import { Command } from "commander";
 import { createClient } from "../core/config-store.js";
-import { printJson } from "../core/output.js";
-import { exitWithError, ValidationError } from "../core/errors.js";
+import { printJson, printError } from "../core/output.js";
+import { exitWithError, ValidationError, DolibarrApiError } from "../core/errors.js";
 import { isDryRunEnabled } from "../core/runtime.js";
+import { normalizeApiPath, isAllNullObject } from "../core/api-path.js";
 
 export function createRawCommand(): Command {
   const cmd = new Command("raw")
     .description("Execute raw API requests")
     .argument("<method>", "HTTP method (GET, POST, PUT, DELETE)")
-    .argument("<path>", "API path (e.g., /thirdparties)")
+    .argument("<path>", "API path (e.g., /thirdparties). On Git Bash use no leading slash or set MSYS_NO_PATHCONV=1")
     .option("--data <json>", "Request body as JSON string")
     .option("--data-file <file>", "Request body from JSON file")
     .action(async (method: string, path: string, opts) => {
@@ -17,6 +18,9 @@ export function createRawCommand(): Command {
         if (!["GET", "POST", "PUT", "DELETE"].includes(upperMethod)) {
           throw new ValidationError(`Invalid HTTP method: ${method}. Use GET, POST, PUT, or DELETE.`);
         }
+
+        const { path: normalizedPath, warning } = normalizeApiPath(path);
+        if (warning) printError(warning);
 
         let body: unknown;
         if (opts.data) {
@@ -27,29 +31,37 @@ export function createRawCommand(): Command {
         }
 
         if (isDryRunEnabled()) {
-          printJson({ dryRun: true, method: upperMethod, path, body: body ?? null });
+          printJson({ dryRun: true, method: upperMethod, path: normalizedPath, body: body ?? null });
           return;
         }
 
         const client = createClient();
-        let result: unknown;
+        const { status, ok, data } = await client.requestRaw(upperMethod, normalizedPath, body);
 
-        switch (upperMethod) {
-          case "GET":
-            result = await client.get(path);
-            break;
-          case "POST":
-            result = await client.post(path, body);
-            break;
-          case "PUT":
-            result = await client.put(path, body);
-            break;
-          case "DELETE":
-            result = await client.delete(path);
-            break;
+        if (!ok) {
+          // Surface the real HTTP status + body instead of masking the failure.
+          const message =
+            typeof data === "string"
+              ? data
+              : data && typeof data === "object"
+                ? JSON.stringify(data)
+                : `HTTP ${status}`;
+          throw new DolibarrApiError(status, message, upperMethod, normalizedPath, {
+            response: data,
+          });
         }
 
-        printJson(result);
+        printJson(data);
+
+        // A 2xx with an all-null object is Dolibarr's "routed but not served" stub —
+        // often a permission gap or a still-mangled path. Warn so it isn't mistaken
+        // for real data (stdout stays clean JSON for piping).
+        if (isAllNullObject(data)) {
+          printError(
+            `HTTP ${status} but every field in the response is null — this usually means a ` +
+              `permission issue or an unrecognized path, not a real record.`,
+          );
+        }
       } catch (err) {
         exitWithError(err, true);
       }

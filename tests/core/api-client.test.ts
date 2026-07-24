@@ -266,4 +266,55 @@ describe("DolibarrApiClient", () => {
       await expect(client.get("status")).rejects.toThrow(DolibarrApiError);
     });
   });
+
+  describe("requestRaw", () => {
+    it("returns status + parsed body on success without throwing", async () => {
+      const client = new DolibarrApiClient(baseOptions);
+      vi.spyOn(globalThis, "fetch").mockResolvedValue(
+        new Response(JSON.stringify({ id: 5, ref: "FA1" }), { status: 200 }),
+      );
+
+      const res = await client.requestRaw("GET", "invoices/5");
+
+      expect(res.status).toBe(200);
+      expect(res.ok).toBe(true);
+      expect(res.data).toEqual({ id: 5, ref: "FA1" });
+    });
+
+    it("returns a non-ok status + body instead of throwing (e.g. 403)", async () => {
+      const client = new DolibarrApiClient(baseOptions);
+      vi.spyOn(globalThis, "fetch").mockResolvedValue(
+        new Response(JSON.stringify({ error: { message: "injection protection" } }), {
+          status: 403,
+        }),
+      );
+
+      const res = await client.requestRaw("GET", "bad/path");
+
+      expect(res.status).toBe(403);
+      expect(res.ok).toBe(false);
+      expect(res.data).toEqual({ error: { message: "injection protection" } });
+    });
+
+    it("returns null data for an empty body", async () => {
+      const client = new DolibarrApiClient(baseOptions);
+      vi.spyOn(globalThis, "fetch").mockResolvedValue(new Response("", { status: 200 }));
+
+      const res = await client.requestRaw("DELETE", "invoices/5");
+
+      expect(res.status).toBe(200);
+      expect(res.data).toBeNull();
+    });
+
+    it("returns raw text when the body is not JSON", async () => {
+      const client = new DolibarrApiClient(baseOptions);
+      vi.spyOn(globalThis, "fetch").mockResolvedValue(
+        new Response("plain text response", { status: 200 }),
+      );
+
+      const res = await client.requestRaw("GET", "something");
+
+      expect(res.data).toBe("plain text response");
+    });
+  });
 });

@@ -213,6 +213,34 @@ export class DolibarrApiClient {
     return res.json() as Promise<T>;
   }
 
+  /**
+   * Perform a raw request and return the HTTP status alongside the parsed body,
+   * WITHOUT throwing on a non-2xx response. The `raw` command uses this so it can
+   * surface the real status/body instead of masking a failure (e.g. a 403 or an
+   * all-null stub) as success. Retryable 5xx/429 responses are still retried, and
+   * a final failed retry throws DolibarrApiError as usual.
+   */
+  async requestRaw(
+    method: string,
+    path: string,
+    body?: unknown,
+  ): Promise<{ status: number; ok: boolean; data: unknown }> {
+    const res = await this.fetchWithRetry(path, {
+      method,
+      body: body !== undefined ? JSON.stringify(body) : undefined,
+    });
+    const text = await res.text();
+    let data: unknown = null;
+    if (text) {
+      try {
+        data = JSON.parse(text);
+      } catch {
+        data = text;
+      }
+    }
+    return { status: res.status, ok: res.ok, data };
+  }
+
   async delete<T = void>(path: string): Promise<T> {
     const res = await this.fetchWithRetry(path, { method: "DELETE" });
     if (!res.ok) {

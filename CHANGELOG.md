@@ -1,6 +1,16 @@
 # Changelog
 
-## 0.2.6 - 2026-06-21
+## 0.2.7 - 2026-07-24
+
+### Fixed
+
+- **`raw` no longer breaks on Windows/Git Bash (MSYS) path mangling.** Under Git Bash, a leading-slash argument like `/supplierinvoices/18/payments` is rewritten by the shell into a Windows path (`C:/Program Files/Git/...`) before the CLI starts, which Dolibarr rejected with a 403 "injection protection". `raw` now detects and un-mangles this automatically — using `EXEPATH` when available and falling back to `.../Git/` and mingw markers — and prints a one-line notice to stderr. Tip: drop the leading slash or set `MSYS_NO_PATHCONV=1` to avoid it entirely.
+- **`raw` never silently returns an all-null object.** A failed/rejected request now surfaces the real HTTP status and response body instead of masking it as success. A 2xx response whose fields are all null (Dolibarr's "routed but not served" stub — usually a permission or path issue) prints a stderr warning while keeping stdout as clean JSON for piping.
+- **README `raw` examples** now use the real `--data` / `--data-file` flags (they previously showed a nonexistent `--body`) and document the Git Bash path caveat.
+
+### Tests
+
+- Added `api-path` unit tests (path normalization + all-null detection) and `requestRaw` client tests. Test total: 164 → 185.
 
 ### Fixed
 
