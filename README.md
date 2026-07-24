@@ -225,6 +225,14 @@ dolibarr multicurrencies set-rate 2 --rate 1.08 --dry-run
 dolibarr knowledge list
 dolibarr knowledge create --question "How do I reset?" --answer "Click reset."
 
+# MRP — bills of materials & manufacturing orders
+dolibarr mrp boms list
+dolibarr mrp boms add-line 3 --product 7 --qty 2
+dolibarr mrp mos create --product 5 --qty 100 --bom 3 --date-start 2026-05-01
+dolibarr mrp workstations list          # read-only
+# MO production is intentionally not wrapped (it irreversibly consumes stock):
+dolibarr raw POST mos/12/produceandconsumeall --data '{}'
+
 # Raw API (escape hatch)
 dolibarr raw GET /thirdparties
 dolibarr raw POST /invoices --data '{"socid": 1}'
@@ -338,6 +346,7 @@ dolibarr thirdparties create --name "Test" --supplier --dry-run
 | `agenda` | Calendar / agenda events |
 | `multicurrencies` | Currencies + FX rates |
 | `knowledge` | Knowledge-base articles |
+| `mrp` | BOMs, manufacturing orders, workstations |
 
 ## Development
 

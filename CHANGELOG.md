@@ -1,5 +1,72 @@
 # Changelog
 
+## 0.4.7 - 2026-07-25
+
+New resource groups — line 0.4.x, part 8 (final): **`mrp`** (BOMs + manufacturing orders +
+workstations).
+
+> ⚠️ **Module-gated / docs-sourced.** `/boms`, `/mos` and `/workstations` all return `403` on
+> the reference instance (the routes exist — `api_boms.class.php`, `api_mos.class.php`,
+> `api_workstations.class.php` — but the API user lacks MRP permissions). Every path and
+> method below was confirmed by probing the live router; the writes were **not exercised**.
+
+### Added
+
+- **`mrp boms`** — bills of materials (`/boms`): `list`, `get <id>`,
+  `create --label --product [--ref --qty --type --warehouse --duration --efficiency
+  --description --note-public --note-private]`, `update <id>`, `delete <id> --confirm`,
+  `lines <id>`, and `add-line <id> --product --qty [--qty-frozen --disable-stock-change
+  --efficiency --position --child-bom --unit]`.
+- **`mrp mos`** — manufacturing orders (`/mos`): `list`, `get <id>`,
+  `create --product --qty [--bom --warehouse --type --date-start --date-end --project
+  --socid …]`, `update <id>`, `delete <id> --confirm`. Creating or editing an MO does not
+  move stock.
+- **`mrp workstations`** — `list` and `get <id>`, **read-only by design** (see below).
+
+### Deliberately NOT wrapped: MO production
+
+`POST /mos/{id}/produceandconsumeall` produces the finished product **and consumes every
+component's stock in one irreversible call** — the API exposes no inverse operation. The
+route exists on Dolibarr 20.0.4 but is permission-gated here (`403 "Not enough
+permission"`), so its request shape could not be verified.
+
+Rather than guess at a command that consumes real inventory, it is left to the escape hatch,
+which both `mrp --help` and `mrp mos --help` name explicitly:
+
+```
+dolibarr raw POST mos/{id}/produceandconsumeall --data '{...}'
+```
+
+It will be wrapped once it can be exercised against a module-enabled instance. This was an
+explicit, recorded decision rather than an oversight — a test asserts the `produce`
+subcommand is *not* registered and that the help text carries the escape hatch.
+
+### Route findings (Dolibarr 20.0.4)
+
+- **Workstations are read-only.** `POST /workstations` answers `405 Method Not Allowed` and
+  `PUT`/`DELETE /workstations/{id}` answer `404`, so no write subcommands exist.
+- **`/mos` has no `validate`, `produce`, `consume`, `cancel` or `lines` sub-resource** — all
+  route-stage 404s. `produceandconsumeall` is the only action route on the resource.
+- **BOM lines can be listed and added, but not edited or removed** — no `PUT`/`DELETE` on
+  `/boms/{id}/lines/{lineid}`.
+
+### Tests
+
+- Added MRP command-tree, body-builder and column tests, including assertions that the
+  production subcommand is absent and that workstations expose no writes.
+  Test total: 402 → 420.
+
+### 0.4.x line complete
+
+This is the last release of the 0.4.x "new resource groups" line — eight versions
+(0.4.0 → 0.4.7) delivering **ten** new command groups: `interventions`, `expensereports`,
+`members`, `stock`, `supplier-proposals`, `tasks`, `agenda`, `multicurrencies`, `knowledge`
+and `mrp`. That brings the CLI from 23 to **33 command groups**, covering every practical
+Dolibarr REST module on a standard instance. Test suite grew 260 → 420.
+
+Next up: 0.5.x — bulk, batch and scripting power (batch-by-ids, `--all-draft`, server-side
+list filters, auto-paginate, bulk create, pipeline output formats).
+
 ## 0.4.6 - 2026-07-25
 
 New resource groups — line 0.4.x, part 7: **`multicurrencies`** + **`knowledge`**.

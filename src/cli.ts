@@ -34,6 +34,7 @@ import { createTasksCommand } from "./commands/tasks.js";
 import { createAgendaCommand } from "./commands/agenda.js";
 import { createMulticurrenciesCommand } from "./commands/multicurrencies.js";
 import { createKnowledgeCommand } from "./commands/knowledge.js";
+import { createMrpCommand } from "./commands/mrp.js";
 import { createUpgradeCommand } from "./commands/upgrade.js";
 import {
   ensureFreshCacheOnColdStart,
@@ -99,6 +100,7 @@ program.addCommand(createTasksCommand());
 program.addCommand(createAgendaCommand());
 program.addCommand(createMulticurrenciesCommand());
 program.addCommand(createKnowledgeCommand());
+program.addCommand(createMrpCommand());
 program.addCommand(createUpgradeCommand());
 
 configureHelp(program);
