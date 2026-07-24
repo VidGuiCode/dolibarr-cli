@@ -219,6 +219,12 @@ dolibarr tasks timespent add 9 --date 2026-03-01 --hours 1.5
 dolibarr agenda list --user 2
 dolibarr agenda create --label "Client call" --start 2026-04-01 --type AC_RDV
 
+# Multi-currency & knowledge base
+dolibarr multicurrencies list
+dolibarr multicurrencies set-rate 2 --rate 1.08 --dry-run
+dolibarr knowledge list
+dolibarr knowledge create --question "How do I reset?" --answer "Click reset."
+
 # Raw API (escape hatch)
 dolibarr raw GET /thirdparties
 dolibarr raw POST /invoices --data '{"socid": 1}'
@@ -330,6 +336,8 @@ dolibarr thirdparties create --name "Test" --supplier --dry-run
 | `supplier-proposals` | Supplier price requests |
 | `tasks` | Project tasks + time spent |
 | `agenda` | Calendar / agenda events |
+| `multicurrencies` | Currencies + FX rates |
+| `knowledge` | Knowledge-base articles |
 
 ## Development
 

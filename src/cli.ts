@@ -32,6 +32,8 @@ import { createStockCommand } from "./commands/stock.js";
 import { createSupplierProposalsCommand } from "./commands/supplier-proposals.js";
 import { createTasksCommand } from "./commands/tasks.js";
 import { createAgendaCommand } from "./commands/agenda.js";
+import { createMulticurrenciesCommand } from "./commands/multicurrencies.js";
+import { createKnowledgeCommand } from "./commands/knowledge.js";
 import { createUpgradeCommand } from "./commands/upgrade.js";
 import {
   ensureFreshCacheOnColdStart,
@@ -95,6 +97,8 @@ program.addCommand(createStockCommand());
 program.addCommand(createSupplierProposalsCommand());
 program.addCommand(createTasksCommand());
 program.addCommand(createAgendaCommand());
+program.addCommand(createMulticurrenciesCommand());
+program.addCommand(createKnowledgeCommand());
 program.addCommand(createUpgradeCommand());
 
 configureHelp(program);

@@ -1,5 +1,50 @@
 # Changelog
 
+## 0.4.6 - 2026-07-25
+
+New resource groups — line 0.4.x, part 7: **`multicurrencies`** + **`knowledge`**.
+
+> ⚠️ **Module-gated / docs-sourced.** Both surfaces are permission-gated on the reference
+> instance (`403 "Insufficient rights to read currency"`;
+> `403` on `api_knowledgemanagement.class.php`). Every path and method below was confirmed by
+> probing the live router, and the mandatory create fields for a currency came from the
+> API's own validator — but the writes were **not exercised**.
+
+### Added
+
+- **`multicurrencies`** command group (`/multicurrencies`) — FX definitions and rates:
+  - `list`, `get <id>`, `rates <id>` (the currency's recorded rate history).
+  - `create --code --name [--rate]` — both `code` and `name` are mandatory per the API's
+    validator; `--from-json` also accepted. Echoes the created object.
+  - `update <id>` — `--code` / `--name`; only what you pass is sent.
+  - `set-rate <id> --rate <n>` — **⚠️ the rate drives every multi-currency conversion**, so
+    it is guarded: `--dry-run` previews the body and a confirmation (or `--confirm`) is
+    required.
+  - `delete <id>` — confirmation prompt or `--confirm`.
+- **`knowledge`** command group (`/knowledgemanagement/knowledgerecords`) — KB articles with
+  full CRUD (`list`, `get`, `create --question …`, `update`, `delete --confirm`) plus
+  `--answer --ref --lang --url --category --status --note-public --note-private`.
+
+### Path and route findings (Dolibarr 20.0.4)
+
+- **Knowledge records live at the nested `knowledgemanagement/knowledgerecords`.** A bare
+  `knowledgemanagement` returns a route-stage 404 and `knowledgerecords` returns a `501` —
+  the module prefix cannot be dropped. This was the one path in the 0.4.x line that needed
+  more than a spelling change to find.
+- **The FX rate is updated with `PUT /multicurrencies/{id}/rates`.** `POST /{id}/rates` and
+  `DELETE /multicurrencies/rates/{id}` are both route-stage 404s, so there is no rate-create
+  or rate-delete subcommand.
+- **No `/multicurrencies/code/{code}`** lookup route (route-stage 404), so no `by-code`
+  subcommand — `get` takes a numeric ID. Same for knowledge: no `/ref/{ref}`.
+- **`code` and `name` are both mandatory** on a currency create.
+- No currency was created during verification on purpose: `POST` reaches the validator but
+  `DELETE` returns `403`, so a probe record would have been unremovable.
+
+### Tests
+
+- Added multicurrency + knowledge command-tree, body-builder and column tests.
+  Test total: 385 → 402.
+
 ## 0.4.5 - 2026-07-25
 
 New resource groups — line 0.4.x, part 6: **`tasks`** + **`agenda`**.
