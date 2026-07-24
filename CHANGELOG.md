@@ -1,5 +1,61 @@
 # Changelog
 
+## 0.4.3 - 2026-07-25
+
+New resource groups — line 0.4.x, part 4: **`stock`** (warehouses + movements).
+
+> ⚠️ **Module-gated / docs-sourced.** `/warehouses` and `/stockmovements` return `403` on
+> the reference instance (routes exist — `api_warehouses.class.php`,
+> `api_stockmovements.class.php` — but the API user lacks stock permissions). Every path,
+> method and mandatory field below was confirmed by probing the live router and validator;
+> the writes were **not exercised**.
+
+### Added
+
+- **`stock warehouses`** — full CRUD over `/warehouses`:
+  - `list` — `--category` filter plus the shared list flags; open/closed status as a label.
+  - `get <id>` — detail view including `stock_reel` / `stock_theorique`.
+  - `create --label …` — plus `--location --description --address --zip --town --country
+    --phone --parent --status`, or `--from-json`. Echoes the created object.
+  - `update <id>` — same field flags; only what you pass is sent. Echoes the result.
+  - `delete <id>` — confirmation prompt or `--confirm`.
+- **`stock movements`** — the stock movement ledger:
+  - `list` — `--product` / `--warehouse` filters (mapped to `sqlfilters`).
+  - `create --product --warehouse --qty [--type --lot --label --code --price --date
+    --origin-type --origin-id]` — **⚠️ mutates real inventory.** Guarded exactly like
+    v0.3.8's `products correct-stock`: `--dry-run` previews the body and a confirmation
+    (or `--confirm`) is required, so a non-interactive shell without `--confirm` refuses to
+    proceed. `--from-json` is available for a raw body.
+
+### Shared with the `products` group — not duplicated
+
+v0.3.8 already shipped `products stock-movements` and `products correct-stock`, which hit
+the same endpoints product-first. Rather than reimplement them, the movement body builder,
+the `sqlfilters` builder and the movement column spec moved into a new **`src/core/stock.ts`**
+that both command groups import. `products.ts` re-exports `buildStockMovementBody` from
+there, and a test asserts the two surfaces really share one function. Both groups' help text
+cross-links to the other:
+
+| warehouse-first (0.4.3) | product-first (0.3.8) |
+|---|---|
+| `stock movements list` | `products stock-movements` |
+| `stock movements create` | `products correct-stock <product-id>` |
+
+### Route findings (Dolibarr 20.0.4)
+
+- **The movement ledger is append-only.** `GET`, `PUT` and `DELETE` on
+  `/stockmovements/{id}` all return a route-stage 404 — only list and create exist — so
+  there is deliberately no `movements get/update/delete`.
+- **`product_id`, `warehouse_id` and `qty` are all mandatory** on a movement create,
+  confirmed by the API's own validation messages.
+- **No `/warehouses/ref/{ref}`** route, so `get` takes a numeric ID.
+
+### Tests
+
+- Added stock command-tree, warehouse body-builder and shared-helper tests (including one
+  asserting `products` and `stock` share a single movement body builder).
+  Test total: 322 → 339.
+
 ## 0.4.2 - 2026-07-25
 
 New resource groups — line 0.4.x, part 3: **`members`** (+ subscriptions + member types).

@@ -28,6 +28,7 @@ import { createReceptionsCommand } from "./commands/receptions.js";
 import { createInterventionsCommand } from "./commands/interventions.js";
 import { createExpenseReportsCommand } from "./commands/expensereports.js";
 import { createMembersCommand } from "./commands/members.js";
+import { createStockCommand } from "./commands/stock.js";
 import { createUpgradeCommand } from "./commands/upgrade.js";
 import {
   ensureFreshCacheOnColdStart,
@@ -87,6 +88,7 @@ program.addCommand(createReceptionsCommand());
 program.addCommand(createInterventionsCommand());
 program.addCommand(createExpenseReportsCommand());
 program.addCommand(createMembersCommand());
+program.addCommand(createStockCommand());
 program.addCommand(createUpgradeCommand());
 
 configureHelp(program);

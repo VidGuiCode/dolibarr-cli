@@ -197,6 +197,13 @@ dolibarr members by-email member@example.com
 dolibarr members subscriptions add 7 --start 2026-01-01 --end 2026-12-31 --amount 50
 dolibarr members types list
 
+# Stock & warehouses
+dolibarr stock warehouses list
+dolibarr stock warehouses create --label "Main depot" --location "Aisle 1"
+dolibarr stock movements list --product 12
+# Same endpoint as `products correct-stock`, warehouse-first — guarded, so preview first:
+dolibarr stock movements create --product 12 --warehouse 1 --qty -3 --dry-run
+
 # Raw API (escape hatch)
 dolibarr raw GET /thirdparties
 dolibarr raw POST /invoices --data '{"socid": 1}'
@@ -304,6 +311,7 @@ dolibarr thirdparties create --name "Test" --supplier --dry-run
 | `interventions` | Interventions (fichinter) + time lines |
 | `expensereports` | Expense reports + payment tracking |
 | `members` | Members, subscriptions, member types |
+| `stock` | Warehouses + stock movement ledger |
 
 ## Development
 

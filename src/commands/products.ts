@@ -13,6 +13,11 @@ import {
   renderList,
 } from "../core/resource-helpers.js";
 import { toEpochSeconds } from "../core/dates.js";
+import {
+  buildStockMovementBody,
+  buildStockMovementFilter,
+  stockMovementColumns,
+} from "../core/stock.js";
 
 export function createProductsCommand(): Command {
   const cmd = new Command("products").description("Manage products and services");
@@ -225,53 +230,32 @@ export function createProductsCommand(): Command {
   return cmd;
 }
 
-/** Build the POST body for a stock movement / correction. */
-export function buildStockMovementBody(
-  productId: string,
-  opts: Record<string, unknown>,
-): Record<string, unknown> {
-  const body: Record<string, unknown> = {
-    product_id: Number(productId),
-    warehouse_id: Number(opts.warehouse),
-    qty: Number(opts.qty),
-  };
-  if (opts.type !== undefined) body.type = Number(opts.type);
-  if (opts.lot !== undefined) body.lot = opts.lot;
-  if (opts.label !== undefined) body.movementlabel = opts.label;
-  if (opts.code !== undefined) body.movementcode = opts.code;
-  if (opts.price !== undefined) body.price = Number(opts.price);
-  if (opts.date !== undefined) body.datem = toEpochSeconds(opts.date as string);
-  return body;
-}
+/**
+ * Build the POST body for a stock movement / correction.
+ * Re-exported from `core/stock.ts`, which the warehouse-centric `stock` group shares.
+ */
+export { buildStockMovementBody };
 
-/** `products stock-movements` — list warehouse stock movements. */
+/**
+ * `products stock-movements` — list warehouse stock movements, product-first.
+ * The warehouse-first equivalent is `stock movements list`; both hit
+ * `GET /stockmovements` through the shared helpers in `core/stock.ts`.
+ */
 function createProductStockMovementsCommand(): Command {
   const cmd = new Command("stock-movements").description("List warehouse stock movements");
   addListOptions(cmd)
     .option("--product <id>", "Filter by product ID")
     .option("--warehouse <id>", "Filter by warehouse ID")
+    .addHelpText("after", "\nSee also: `dolibarr stock movements list` (warehouse-first view).")
     .action(async (opts) => {
       try {
-        const filters: string[] = [];
-        if (opts.product) filters.push(`(t.fk_product:=:${Number(opts.product)})`);
-        if (opts.warehouse) filters.push(`(t.fk_entrepot:=:${Number(opts.warehouse)})`);
-        const sqlfilters = filters.length ? filters.join(" and ") : opts.filter;
+        const sqlfilters = buildStockMovementFilter(opts) ?? opts.filter;
         const client = createClient();
         const items = await client.get<Record<string, unknown>[]>(
           "stockmovements",
           buildListQuery({ ...opts, filter: sqlfilters }),
         );
-        renderList(items, {
-          opts,
-          columns: [
-            { key: "id", label: "ID" },
-            { key: "fk_product", label: "Product", format: (i) => String(i.fk_product ?? i.product_id ?? "") },
-            { key: "fk_entrepot", label: "Warehouse", format: (i) => String(i.fk_entrepot ?? i.warehouse_id ?? "") },
-            { key: "qty", label: "Qty" },
-            { key: "type", label: "Type" },
-            { key: "label", label: "Label", format: (i) => String(i.label ?? i.movementlabel ?? "").slice(0, 40) },
-          ],
-        });
+        renderList(items, { opts, columns: stockMovementColumns });
       } catch (err) { exitWithError(err, Boolean(opts.json || opts.output === "json")); }
     });
   return cmd;
@@ -303,7 +287,8 @@ function createProductCorrectStockCommand(): Command {
       "after",
       "\n⚠️  This changes real inventory levels via POST /stockmovements. Preview with" +
         "\n--dry-run first. It was authored from the documented API shape and could not be" +
-        "\nexercised live on the reference instance (stock permission gated).",
+        "\nexercised live on the reference instance (stock permission gated)." +
+        "\n\nSee also: `dolibarr stock movements create` — the same endpoint, warehouse-first.",
     );
   cmd.action(async (productId, opts) => {
     try {
