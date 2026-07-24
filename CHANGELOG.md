@@ -1,6 +1,19 @@
 # Changelog
 
-## 0.2.8 - 2026-07-24
+## 0.2.9 - 2026-07-24
+
+### Added
+
+- **`raw --date <keys>` date helper.** Convert `YYYY-MM-DD` values in a `raw` request body to the Unix epoch seconds Dolibarr expects, instead of hand-computing timestamps: `dolibarr raw PUT /supplierinvoices/18 --data '{"date":"2026-03-01"}' --date date`. Accepts one or more comma-separated body keys; date-only values are treated as UTC midnight, and existing epoch values pass through unchanged.
+
+### Changed
+
+- **`list --help` now surfaces the slim-output/`--fields` guidance.** Every `list` command's help footer explains that output is a slim table by default (not full JSON) and shows how to pick columns with `--fields id,ref,date,total_ttc` or switch format with `--output json|csv` — the `--fields` selector shipped in v0.2.0 but was undiscoverable.
+- **README** gained a "Dates" section documenting `YYYY-MM-DD` acceptance and the `raw --date` helper.
+
+### Tests
+
+- Added `dates` unit tests (`toEpochSeconds`, `normalizeDateFields`: YYYY-MM-DD → UTC epoch, passthrough, timezone-stability, error cases). Test total: 191 → 199.
 
 ### Added
 

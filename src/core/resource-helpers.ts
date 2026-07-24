@@ -21,7 +21,7 @@ export function prunePayload<T extends Record<string, unknown>>(body: T): T {
  * Returns the same command for chaining.
  */
 export function addListOptions(cmd: Command): Command {
-  return cmd
+  cmd
     .option("--output <fmt>", "Output format: table|json|csv", "table")
     .option("--json", "Output as JSON (alias for --output json)")
     .option("--fields <keys>", "Comma-separated field keys to project (e.g. id,ref,total_ttc)")
@@ -30,6 +30,12 @@ export function addListOptions(cmd: Command): Command {
     .option("--sort <field>", "Sort field")
     .option("--order <dir>", "Sort order (ASC|DESC)")
     .option("--filter <expr>", "SQL filter expression");
+  cmd.addHelpText(
+    "after",
+    "\nOutput: shows a slim table by default (not full JSON). Pick columns with" +
+      "\n  --fields id,ref,date,total_ttc   and/or switch format with --output json|csv.",
+  );
+  return cmd;
 }
 
 /**

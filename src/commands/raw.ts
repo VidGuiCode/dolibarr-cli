@@ -4,6 +4,7 @@ import { printJson, printError } from "../core/output.js";
 import { exitWithError, ValidationError, DolibarrApiError } from "../core/errors.js";
 import { isDryRunEnabled } from "../core/runtime.js";
 import { normalizeApiPath, isAllNullObject } from "../core/api-path.js";
+import { normalizeDateFields } from "../core/dates.js";
 
 export function createRawCommand(): Command {
   const cmd = new Command("raw")
@@ -12,6 +13,10 @@ export function createRawCommand(): Command {
     .argument("<path>", "API path (e.g., /thirdparties). On Git Bash use no leading slash or set MSYS_NO_PATHCONV=1")
     .option("--data <json>", "Request body as JSON string")
     .option("--data-file <file>", "Request body from JSON file")
+    .option(
+      "--date <keys>",
+      "Comma-separated body keys holding YYYY-MM-DD dates to convert to Unix epoch (e.g. --date date,datef)",
+    )
     .action(async (method: string, path: string, opts) => {
       try {
         const upperMethod = method.toUpperCase();
@@ -28,6 +33,16 @@ export function createRawCommand(): Command {
         } else if (opts.dataFile) {
           const fs = await import("node:fs");
           body = JSON.parse(fs.readFileSync(opts.dataFile, "utf-8"));
+        }
+
+        // --date lets callers pass YYYY-MM-DD in the body and have it converted to
+        // the Unix epoch seconds Dolibarr expects, instead of hand-computing timestamps.
+        if (opts.date && body && typeof body === "object" && !Array.isArray(body)) {
+          const keys = String(opts.date)
+            .split(",")
+            .map((s) => s.trim())
+            .filter(Boolean);
+          body = normalizeDateFields(body as Record<string, unknown>, keys);
         }
 
         if (isDryRunEnabled()) {

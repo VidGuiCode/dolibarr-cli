@@ -135,6 +135,8 @@ dolibarr raw GET /thirdparties
 dolibarr raw POST /invoices --data '{"socid": 1}'
 dolibarr raw PUT /thirdparties/5 --data '{"fournisseur": 1}'
 dolibarr raw POST /invoices --data-file body.json
+# Convert YYYY-MM-DD body fields to the Unix epoch Dolibarr wants — no hand-computing:
+dolibarr raw PUT /supplierinvoices/18 --data '{"date":"2026-03-01"}' --date date
 ```
 
 > **Windows / Git Bash (MSYS) note:** Git Bash rewrites a leading-slash argument
@@ -172,6 +174,16 @@ dolibarr thirdparties get 5 --fields id,name,email,town --output json
 ```
 
 With `--fields`, values pass through raw — e.g. `--fields status` emits the numeric code (`0` / `1` / `2`) rather than the mapped label (`Draft` / `Validated` / `Paid`). Missing keys render as empty strings.
+
+### Dates
+
+Command flags such as `create --date` and `pay --date` accept `YYYY-MM-DD` and convert it to the Unix epoch (seconds) Dolibarr stores. When you need a date inside a `raw` request body, pass `--date <keys>` to convert the named body fields for you, so you never have to hand-compute a timestamp:
+
+```bash
+dolibarr raw PUT /supplierinvoices/18 --data '{"date":"2026-03-01"}' --date date
+```
+
+Date-only values are interpreted as UTC midnight. `get` views already render stored epoch dates back as `YYYY-MM-DD`.
 
 ### Ref-based lookup
 
