@@ -112,6 +112,15 @@ dolibarr orders update-line 42 310 --qty 3        # edit a draft order line; tot
 dolibarr orders contacts list 42
 dolibarr orders reopen 42
 
+# Supplier orders (path fixed in v0.3.4)
+dolibarr supplier-orders list
+dolibarr supplier-orders make-order 8 --date 2025-06-15
+dolibarr supplier-orders receive 8 --close
+
+# Proposals / supplier-invoice line editing
+dolibarr proposals update-line 15 220 --qty 4
+dolibarr supplier-invoices update-line 7 88 --subprice 42   # maps to pu_ht; totals recompute
+
 # Thirdparty banking (RIB / SEPA / gateways)
 dolibarr thirdparties bank-accounts list 3
 dolibarr thirdparties bank-accounts create 3 --label Main --iban LU28... --bic BCEELULL --rum RUM-0001

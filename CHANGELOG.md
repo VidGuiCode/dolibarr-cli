@@ -1,5 +1,48 @@
 # Changelog
 
+## 0.3.4 - 2026-07-24
+
+Deep endpoint coverage — line 0.3.x, part 5: proposals + supplier-side deep, and a
+significant fix to the supplier-orders group.
+
+### Fixed
+
+- **The entire `supplier-orders` command group was broken.** It called the API path
+  `supplier_orders`, which Dolibarr answers with `501 API not found`. The correct path is
+  `supplierorders` (no underscore). Every `supplier-orders` subcommand
+  (list/get/create/update/delete/validate/approve) now works. Verified live vs Dolibarr
+  20.0.4.
+
+### Added
+
+- **`supplier-orders make-order <id>`** — send an approved order to the supplier
+  (`--date --method --comment`).
+- **`supplier-orders receive <id>`** — record reception (`--close`, `--comment`,
+  `--from-json` with a `[{ id, qty, comment }]` lines array for partial reception).
+- **`supplier-orders contacts <id>`** — list linked contacts (`--source
+  internal|external`, default external — Dolibarr requires the source).
+- **`supplier-invoices add-line / update-line / delete-line / list-lines`** — full
+  line editing. Supplier-invoice lines use `pu_ht` for the unit price (Dolibarr silently
+  ignores `subprice` here), so `--subprice` is mapped to `pu_ht` and totals recompute.
+  Verified live.
+- **`proposals update-line / delete-line`** — edit or remove a proposal line
+  (`PUT`/`DELETE /proposals/{id}/lines/{lineid}`). See the note below.
+
+### Notes
+
+- **Proposal line *creation* fails on the test instance** with a Dolibarr-side error
+  (`api_proposals.class.php:463`, "Bad Request: , Array") for every field combination
+  tried, so `proposals add-line` / `update-line` / `delete-line` are wired against the
+  verified REST routes but could not be functionally exercised. This is a Dolibarr API
+  issue, not a CLI one.
+- Supplier orders expose **no** line-edit or contact add/remove routes (only a contacts
+  *list*), so those are intentionally not provided.
+
+### Tests
+
+- Added proposals, supplier-orders, and supplier-invoice line-editing tests. Test total:
+  235 → 243.
+
 ## 0.3.3 - 2026-07-24
 
 Deep endpoint coverage — line 0.3.x, part 4: the orders sub-resource surface.

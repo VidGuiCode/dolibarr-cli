@@ -68,6 +68,24 @@ export function buildSupplierInvoiceUpdateBody(
   return body;
 }
 
+/**
+ * Build the POST/PUT body for a supplier-invoice line. Supplier-invoice lines use
+ * `pu_ht` for the unit price (NOT `subprice`, which is silently ignored on this
+ * endpoint — verified live vs Dolibarr 20.0.4) and require an integer `product_type`.
+ */
+export function buildSupplierInvoiceLineBody(
+  opts: Record<string, unknown>,
+): Record<string, unknown> {
+  const body: Record<string, unknown> = {};
+  if (opts.desc !== undefined) body.desc = opts.desc;
+  if (opts.subprice !== undefined) body.pu_ht = Number(opts.subprice);
+  if (opts.qty !== undefined) body.qty = Number(opts.qty);
+  if (opts.tvaTx !== undefined) body.tva_tx = Number(opts.tvaTx);
+  if (opts.productId !== undefined) body.fk_product = Number(opts.productId);
+  if (opts.remise !== undefined) body.remise_percent = Number(opts.remise);
+  return body;
+}
+
 export function createSupplierInvoicesCommand(): Command {
   const cmd = new Command("supplier-invoices").description("Manage supplier invoices");
 
@@ -243,6 +261,102 @@ export function createSupplierInvoicesCommand(): Command {
         const result = await client.post<unknown>(`supplierinvoices/${id}/payments`, body);
         if (opts.json) { printJson(result); return; }
         printInfo(`Payment registered on supplier invoice ${id}`);
+      } catch (err) { exitWithError(err, Boolean(opts.json)); }
+    });
+
+  addGetOptions(
+    cmd
+      .command("list-lines")
+      .description("List lines of a supplier invoice")
+      .argument("<id>", "Invoice ID"),
+  )
+    .action(async (id, opts) => {
+      try {
+        const client = createClient();
+        const lines = await client.get<Record<string, unknown>[]>(`supplierinvoices/${id}/lines`);
+        renderList(lines, {
+          opts,
+          columns: [
+            { key: "id", label: "Line ID" },
+            {
+              key: "desc",
+              label: "Description",
+              format: (l) => String(l.desc ?? l.description ?? "").substring(0, 40),
+            },
+            { key: "qty", label: "Qty" },
+            { key: "pu_ht", label: "Unit Price", format: (l) => String(l.pu_ht ?? l.subprice ?? "") },
+            { key: "tva_tx", label: "VAT %" },
+            { key: "total_ht", label: "Total HT" },
+          ],
+        });
+      } catch (err) { exitWithError(err, Boolean(opts.json || opts.output === "json")); }
+    });
+
+  cmd
+    .command("add-line")
+    .description("Add a line to a supplier invoice")
+    .argument("<id>", "Invoice ID")
+    .option("--json", "Output as JSON")
+    .requiredOption("--desc <text>", "Line description")
+    .requiredOption("--subprice <n>", "Unit price excl. tax (maps to pu_ht)")
+    .requiredOption("--qty <n>", "Quantity")
+    .requiredOption("--tva-tx <n>", "VAT rate (e.g., 20)")
+    .option("--product-id <id>", "Product ID")
+    .option("--product-type <n>", "0=product, 1=service", "0")
+    .action(async (id, opts) => {
+      try {
+        const body = buildSupplierInvoiceLineBody(opts);
+        body.product_type = Number(opts.productType ?? 0);
+        if (dryRunJson("supplier-invoices.addLine", { id, body })) return;
+        const client = createClient();
+        const result = await client.post<unknown>(`supplierinvoices/${id}/lines`, body);
+        if (opts.json) { printJson(result); return; }
+        printInfo(`Added line to supplier invoice ${id}`);
+      } catch (err) { exitWithError(err, Boolean(opts.json)); }
+    });
+
+  cmd
+    .command("update-line")
+    .description("Edit a line on a draft supplier invoice (recomputes totals)")
+    .argument("<id>", "Invoice ID")
+    .argument("<lineid>", "Line ID")
+    .option("--json", "Output as JSON")
+    .option("--desc <text>", "Line description")
+    .option("--subprice <n>", "Unit price excl. tax (maps to pu_ht)")
+    .option("--qty <n>", "Quantity")
+    .option("--tva-tx <n>", "VAT rate (e.g., 20)")
+    .option("--product-id <id>", "Product ID")
+    .option("--remise <n>", "Discount percentage")
+    .action(async (id, lineid, opts) => {
+      try {
+        const body = buildSupplierInvoiceLineBody(opts);
+        if (dryRunJson("supplier-invoices.updateLine", { id, lineid, body })) return;
+        const client = createClient();
+        await client.put<unknown>(`supplierinvoices/${id}/lines/${lineid}`, body);
+        if (opts.json) {
+          printJson(await client.get(`supplierinvoices/${id}/lines`));
+          return;
+        }
+        printInfo(`Updated line ${lineid} on supplier invoice ${id}`);
+      } catch (err) { exitWithError(err, Boolean(opts.json)); }
+    });
+
+  cmd
+    .command("delete-line")
+    .description("Delete a line from a draft supplier invoice (recomputes totals)")
+    .argument("<id>", "Invoice ID")
+    .argument("<lineid>", "Line ID")
+    .option("--confirm", "Skip confirmation prompt")
+    .option("--json", "Output as JSON")
+    .action(async (id, lineid, opts) => {
+      try {
+        if (!(await confirmOrCancel(`Delete line ${lineid} from supplier invoice ${id}?`, opts)))
+          return;
+        if (dryRunJson("supplier-invoices.deleteLine", { id, lineid })) return;
+        const client = createClient();
+        await client.delete(`supplierinvoices/${id}/lines/${lineid}`);
+        if (opts.json) { printJson({ deleted: lineid }); return; }
+        printInfo(`Deleted line ${lineid} from supplier invoice ${id}`);
       } catch (err) { exitWithError(err, Boolean(opts.json)); }
     });
 

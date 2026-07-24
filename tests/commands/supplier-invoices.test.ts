@@ -1,6 +1,7 @@
 import { describe, it, expect } from "vitest";
 import type { Command } from "commander";
 import {
+  buildSupplierInvoiceLineBody,
   buildSupplierInvoiceUpdateBody,
   createSupplierInvoicesCommand,
   supplierInvoiceDetailFields,
@@ -53,5 +54,17 @@ describe("supplier-invoices command", () => {
 
   it("pay exposes --close (closepaidinvoices) after the payment_mode_id fix", () => {
     expect(flags(sub(cmd, "pay")!)).toContain("--close");
+  });
+
+  it("registers line editing (add/update/delete/list)", () => {
+    for (const name of ["add-line", "update-line", "delete-line", "list-lines"]) {
+      expect(sub(cmd, name), name).toBeDefined();
+    }
+  });
+
+  it("maps a supplier-invoice line's --subprice to pu_ht (subprice is ignored by the API)", () => {
+    const body = buildSupplierInvoiceLineBody({ subprice: "50", qty: "3", tvaTx: "17" });
+    expect(body).toEqual({ pu_ht: 50, qty: 3, tva_tx: 17 });
+    expect(body).not.toHaveProperty("subprice");
   });
 });

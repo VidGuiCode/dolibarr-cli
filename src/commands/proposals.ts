@@ -9,9 +9,22 @@ import {
   buildListQuery,
   confirmOrCancel,
   dryRunJson,
-  renderGet,
   renderList,
+  renderGet,
 } from "../core/resource-helpers.js";
+
+/** Build the PUT/POST body for a proposal line from parsed opts (only passed flags). */
+export function buildProposalLineBody(opts: Record<string, unknown>): Record<string, unknown> {
+  const body: Record<string, unknown> = {};
+  if (opts.desc !== undefined) body.desc = opts.desc;
+  if (opts.subprice !== undefined) body.subprice = Number(opts.subprice);
+  if (opts.qty !== undefined) body.qty = Number(opts.qty);
+  if (opts.tvaTx !== undefined) body.tva_tx = Number(opts.tvaTx);
+  if (opts.productId !== undefined) body.fk_product = Number(opts.productId);
+  if (opts.productType !== undefined) body.product_type = Number(opts.productType);
+  if (opts.remise !== undefined) body.remise_percent = Number(opts.remise);
+  return body;
+}
 
 const STATUS_MAP: Record<string, string> = {
   "0": "Draft",
@@ -203,6 +216,7 @@ export function createProposalsCommand(): Command {
     .requiredOption("--qty <n>", "Quantity")
     .requiredOption("--tva-tx <n>", "VAT rate (e.g., 20)")
     .option("--product-id <id>", "Product ID")
+    .option("--product-type <n>", "0=product, 1=service", "0")
     .action(async (id, opts) => {
       try {
         const body: Record<string, unknown> = {
@@ -210,6 +224,8 @@ export function createProposalsCommand(): Command {
           subprice: Number(opts.subprice),
           qty: Number(opts.qty),
           tva_tx: Number(opts.tvaTx),
+          // Dolibarr's proposal-line insert rejects an empty product_type; default to 0.
+          product_type: Number(opts.productType ?? 0),
         };
         if (opts.productId) body.fk_product = Number(opts.productId);
         if (dryRunJson("proposals.addLine", { id, body })) return;
@@ -217,6 +233,51 @@ export function createProposalsCommand(): Command {
         const result = await client.post<unknown>(`proposals/${id}/lines`, body);
         if (opts.json) { printJson(result); return; }
         printInfo(`Added line to proposal ${id}`);
+      } catch (err) { exitWithError(err, Boolean(opts.json)); }
+    });
+
+  cmd
+    .command("update-line")
+    .description("Edit a line on a draft proposal (recomputes totals)")
+    .argument("<id>", "Proposal ID")
+    .argument("<lineid>", "Line ID")
+    .option("--json", "Output as JSON")
+    .option("--desc <text>", "Line description")
+    .option("--subprice <n>", "Unit price excl. tax")
+    .option("--qty <n>", "Quantity")
+    .option("--tva-tx <n>", "VAT rate (e.g., 20)")
+    .option("--product-id <id>", "Product ID")
+    .option("--product-type <n>", "0=product, 1=service")
+    .option("--remise <n>", "Discount percentage")
+    .action(async (id, lineid, opts) => {
+      try {
+        const body = buildProposalLineBody(opts);
+        if (dryRunJson("proposals.updateLine", { id, lineid, body })) return;
+        const client = createClient();
+        await client.put<unknown>(`proposals/${id}/lines/${lineid}`, body);
+        if (opts.json) {
+          printJson(await client.get(`proposals/${id}/lines`));
+          return;
+        }
+        printInfo(`Updated line ${lineid} on proposal ${id}`);
+      } catch (err) { exitWithError(err, Boolean(opts.json)); }
+    });
+
+  cmd
+    .command("delete-line")
+    .description("Delete a line from a draft proposal (recomputes totals)")
+    .argument("<id>", "Proposal ID")
+    .argument("<lineid>", "Line ID")
+    .option("--confirm", "Skip confirmation prompt")
+    .option("--json", "Output as JSON")
+    .action(async (id, lineid, opts) => {
+      try {
+        if (!(await confirmOrCancel(`Delete line ${lineid} from proposal ${id}?`, opts))) return;
+        if (dryRunJson("proposals.deleteLine", { id, lineid })) return;
+        const client = createClient();
+        await client.delete(`proposals/${id}/lines/${lineid}`);
+        if (opts.json) { printJson({ deleted: lineid }); return; }
+        printInfo(`Deleted line ${lineid} from proposal ${id}`);
       } catch (err) { exitWithError(err, Boolean(opts.json)); }
     });
 
