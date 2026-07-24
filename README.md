@@ -82,7 +82,7 @@ dolibarr invoices list --status 2 --output json
 dolibarr invoices get 12
 dolibarr invoices get FA2501-0001            # look up by ref
 dolibarr invoices validate 12
-dolibarr invoices pay 12 --amount 500.00 --date 2025-12-01
+dolibarr invoices pay 12 --amount 500.00 --date 2025-12-01 --payment-type CB   # or a numeric id
 
 # Supplier invoices
 dolibarr supplier-invoices list --thirdparty 3

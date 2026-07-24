@@ -1,6 +1,19 @@
 # Changelog
 
-## 0.2.7 - 2026-07-24
+## 0.2.8 - 2026-07-24
+
+### Added
+
+- **`invoices pay` / `supplier-invoices pay` accept payment-type codes.** `--payment-type CB` (or `VIR`, `LIQ`, `CHQ`, …) now works alongside the numeric dictionary id — codes are resolved case-insensitively against `GET /setup/dictionary/payment_types`, so you no longer have to look up the per-instance rowid first. An unknown code fails with a message listing the known codes. Numeric ids are passed through unchanged with no extra API call.
+
+### Fixed
+
+- **`--compact` help text clarified.** It now reads "Minify JSON output (strip whitespace only; does not reduce fields)" so it isn't mistaken for a summary/field-reduction view. (Behavior was already corrected in v0.2.5.)
+- **README** `invoices pay` example now includes the required `--payment-type` and shows the new code form.
+
+### Tests
+
+- Added `payment-types` resolver tests (numeric passthrough, code lookup, case-insensitivity, unknown-code error, rowid fallback, dictionary limit). Test total: 185 → 191.
 
 ### Fixed
 

@@ -12,6 +12,7 @@ import {
   renderGet,
   renderList,
 } from "../core/resource-helpers.js";
+import { resolvePaymentTypeId } from "../core/payment-types.js";
 
 const STATUS_MAP: Record<string, string> = {
   "0": "Draft",
@@ -188,20 +189,23 @@ export function createSupplierInvoicesCommand(): Command {
     .argument("<id>", "Invoice ID")
     .option("--json", "Output as JSON")
     .requiredOption("--date <date>", "Payment date (YYYY-MM-DD)")
-    .requiredOption("--payment-type <id>", "Payment mode ID")
+    .requiredOption(
+      "--payment-type <id-or-code>",
+      "Payment mode: numeric dictionary id or code (CB, VIR, LIQ, CHQ, ...)",
+    )
     .option("--amount <n>", "Payment amount")
     .option("--bank-account <id>", "Bank account ID")
     .action(async (id, opts) => {
       try {
+        const client = createClient();
         const body: Record<string, unknown> = {
           datepaye: opts.date,
-          paymentid: Number(opts.paymentType),
+          paymentid: await resolvePaymentTypeId(client, opts.paymentType),
         };
         if (opts.amount) body.amount = Number(opts.amount);
         if (opts.bankAccount) body.accountid = Number(opts.bankAccount);
 
         if (dryRunJson("supplier-invoices.pay", { id, body })) return;
-        const client = createClient();
         const result = await client.post<unknown>(`supplierinvoices/${id}/payments`, body);
         if (opts.json) { printJson(result); return; }
         printInfo(`Payment registered on supplier invoice ${id}`);

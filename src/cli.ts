@@ -49,7 +49,7 @@ program
   .description("Unofficial CLI for Dolibarr ERP")
   .option("--dry-run", "Show what would happen without executing")
   .option("--no-interactive", "Fail instead of prompting for input")
-  .option("--compact", "Output compact JSON (no indentation)")
+  .option("--compact", "Minify JSON output (strip whitespace only; does not reduce fields)")
   .version(pkg.version)
   .helpCommand(true)
   .action(() => {
