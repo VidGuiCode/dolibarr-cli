@@ -1,5 +1,47 @@
 # Changelog
 
+## 0.4.4 - 2026-07-25
+
+New resource groups — line 0.4.x, part 5: **`supplier-proposals`**.
+
+> ⚠️ **Module-gated / docs-sourced.** `/supplierproposals` returns `403` on the reference
+> instance (the route exists — `api_supplier_proposals.class.php` — but the API user lacks
+> supplier-proposal permissions). Every path and method below was confirmed by probing the
+> live router; the writes were **not exercised**.
+
+### Added
+
+- **`supplier-proposals`** command group (`/supplierproposals`) — supplier price requests:
+  - `list` — `--thirdparty <ids>` filter plus the shared list flags; statuses as labels.
+  - `get <id>` — two-column detail view.
+  - `create --socid …` — plus `--date --delivery-date --ref-supplier --project
+    --cond-reglement --mode-reglement --note-public --note-private`, or `--from-json`.
+    Echoes the created object.
+  - `update <id>` — same field flags; only what you pass is sent. Echoes the result.
+  - `delete <id>` — confirmation prompt or `--confirm`.
+  - `lines <id>` — read-only line view, from the `lines` array embedded in the object.
+
+### Path quirk
+
+The API path is **`supplierproposals`** — one word. `supplier_proposals` (as the older
+reference notes had it) returns a `501`, exactly the same quirk as `supplierorders`. The
+reference doc has been corrected.
+
+### Not added (verified absent on Dolibarr 20.0.4 — all route-stage 404s)
+
+- **ref-lookup** — no `/supplierproposals/ref/{ref}`, so `get` takes a numeric ID. Ref
+  lookup is only enabled where the route is confirmed, and here it is not.
+- **line add / edit / delete** — no `/{id}/lines` routes in any method, so `lines` is a
+  read-only view rather than a CRUD subgroup.
+- **`validate` / `close` / `contacts`** — no dedicated routes; Dolibarr's REST surface for
+  this resource is plain CRUD. The help text points at the web UI or `raw PUT` for a status
+  change rather than guessing a field the API may ignore.
+
+### Tests
+
+- Added supplier-proposal command-tree, body-builder and column tests, including one that
+  asserts the absent-route subcommands are *not* registered. Test total: 339 → 352.
+
 ## 0.4.3 - 2026-07-25
 
 New resource groups — line 0.4.x, part 4: **`stock`** (warehouses + movements).

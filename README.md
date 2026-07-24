@@ -204,6 +204,11 @@ dolibarr stock movements list --product 12
 # Same endpoint as `products correct-stock`, warehouse-first — guarded, so preview first:
 dolibarr stock movements create --product 12 --warehouse 1 --qty -3 --dry-run
 
+# Supplier proposals (price requests)
+dolibarr supplier-proposals list --thirdparty 8
+dolibarr supplier-proposals create --socid 8 --date 2026-02-01 --ref-supplier SUP-77
+dolibarr supplier-proposals lines 4
+
 # Raw API (escape hatch)
 dolibarr raw GET /thirdparties
 dolibarr raw POST /invoices --data '{"socid": 1}'
@@ -312,6 +317,7 @@ dolibarr thirdparties create --name "Test" --supplier --dry-run
 | `expensereports` | Expense reports + payment tracking |
 | `members` | Members, subscriptions, member types |
 | `stock` | Warehouses + stock movement ledger |
+| `supplier-proposals` | Supplier price requests |
 
 ## Development
 
