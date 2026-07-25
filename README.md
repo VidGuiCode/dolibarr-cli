@@ -551,9 +551,42 @@ dolibarr invoices list --output csv --no-header
 |---|---|
 | `--output ndjson` | One compact JSON object per line |
 | `--output yaml` | YAML |
+| `--field ref` | **One raw value per row** — no header, no quoting (xargs-friendly) |
 | `--template '{{.ref}}'` | Render each row from a template; `{{.a.b}}` walks nested fields |
 | `--no-header` | Omit the header row from `table` / `csv` |
 | `--quiet` | Suppress headers and batch progress chatter; print data only |
+
+### `--field` vs `--fields`
+
+These are one letter apart and do different things:
+
+| | Does |
+|---|---|
+| `--field ref` | **singular** — prints one bare value per row, nothing else |
+| `--fields id,ref` | **plural** — projects those columns into the chosen `--output` |
+
+```bash
+dolibarr invoices list --field id        # 16⏎17⏎18
+dolibarr invoices list --fields id,ref   # a two-column table
+```
+
+Because a mix-up would otherwise be silent, every confusable combination is rejected with
+exit `3`: a comma in `--field` (it suggests `--fields`), and pairing `--field` with either
+`--fields` or `--template`.
+
+### Piping ids between commands
+
+```bash
+# one call per id
+dolibarr invoices list --all --field id | xargs -n1 dolibarr invoices validate --confirm
+
+# or collapse to a single batch call (see Batch operations)
+dolibarr invoices list --all --field id | paste -sd, - \
+  | xargs dolibarr invoices validate --confirm
+```
+
+Note the `-n1`: a bare `xargs` would hand every id to one invocation, and these subcommands
+take a single id (or one comma-separated list).
 
 Notes:
 

@@ -1,5 +1,62 @@
 # Changelog
 
+## 0.5.6 - 2026-07-25
+
+Final release of the **0.5.x line — bulk, batch & scripting power**. **Scalar extraction**:
+`--field ref` prints one raw value per row.
+
+```bash
+dolibarr invoices list --all --field id | xargs -n1 dolibarr invoices validate --confirm
+```
+
+### Added
+
+- **`--field <key>`** on every command that renders output (**76 commands**), wired through
+  `renderList` / `renderGet`. Prints one bare value per row — no header, no quoting, no
+  delimiters — and walks nested paths (`--field a.b`). A missing key renders an empty line
+  rather than failing the row.
+- `renderField` and `resolveFieldOpt` in `src/core/formats.ts`.
+
+### ⚠️ Decision: `--field` vs `--fields`
+
+The roadmap flagged this as an open UX question, since the two are one letter apart and mean
+different things (scalar extraction vs. column projection). **Resolution: ship both as
+specced, and make every confusable combination fail loudly** rather than silently doing the
+wrong thing:
+
+- `--field id,ref` → rejected, suggesting `--fields id,ref`
+- `--field` + `--fields` → rejected
+- `--field` + `--template` → rejected
+
+All exit `3`. Folding scalar extraction into `--fields` was rejected because it would change
+what `--fields ref` already does, which this line forbids; renaming the new flag was rejected
+because `--field` is named in the roadmap's own exit criteria. **This is the one call in the
+line the maintainer may want to revisit** — the alternative is renaming `--field` to
+something like `--pluck`, which is a one-line change here plus docs.
+
+### Behaviour notes
+
+- `--field` takes precedence over `--output` and `--fields` is untouched — `--fields id,ref`
+  still projects columns exactly as before.
+- Correcting the roadmap's exit-criterion one-liner: piping ids into `xargs` needs `-n1`
+  (one call per id), or the ids joined with `paste -sd,` for a single batch call, because
+  these subcommands take one id or one comma-separated list. Both forms are documented.
+
+### Tests
+
+701 tests (up from 685). **All 420 pre-existing tests still pass unchanged.** Added
+`resolveFieldOpt` guard tests for every rejected combination, `renderField` tests (nested
+paths, missing keys, object values, empty input), renderer tests proving `--field` wins over
+`--output` while `--fields` keeps its meaning, and a reach test that `--field` lands on every
+output-rendering command with a description distinct from `--fields`.
+
+### Verified live
+
+Exercised against Dolibarr 20.0.4: `--field id` and `--field ref` on a list, `--field` on a
+`get`, all three rejection paths exiting 3 with their hints, `--fields` still projecting
+columns unchanged, a missing key yielding blank lines rather than an error, and the full
+pipeline of extracting ids and feeding them back into a batch mutation.
+
 ## 0.5.5 - 2026-07-25
 
 Sixth release of the **0.5.x line**. **Pipeline output formats**: `ndjson`, `yaml`,

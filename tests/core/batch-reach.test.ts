@@ -375,15 +375,26 @@ describe("output-format reach (v0.5.5)", () => {
     }
   });
 
-  it("adds --template/--no-header to every command that renders output", () => {
+  it("adds --template/--no-header/--field to every command that renders output", () => {
     const rendering = leaves.filter((l) => l.cmd.options.some((o) => o.long === "--output"));
     expect(rendering.length).toBeGreaterThan(70);
     for (const { path: p, cmd } of rendering) {
       const longs = cmd.options.map((o) => o.long);
       expect(longs, `${p} missing --template`).toContain("--template");
       expect(longs, `${p} missing --no-header`).toContain("--no-header");
+      expect(longs, `${p} missing --field`).toContain("--field");
     }
     expect(formatWired.sort()).toEqual(rendering.map((l) => l.path).sort());
+  });
+
+  it("keeps --field and --fields as separate, distinctly-described flags", () => {
+    // v0.5.6's deliberate collision: both exist, and mixing them is rejected at
+    // runtime rather than silently doing the wrong thing.
+    const list = leaves.find((l) => l.path === "invoices list")!.cmd;
+    const field = list.options.find((o) => o.long === "--field")!;
+    const fields = list.options.find((o) => o.long === "--fields")!;
+    expect(field.description).toMatch(/one raw value per row/);
+    expect(fields.description).toMatch(/project/i);
   });
 
   it("does not add rendering flags where there is nothing to render", () => {

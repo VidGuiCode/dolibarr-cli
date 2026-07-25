@@ -152,6 +152,47 @@ export function renderTemplate(items: unknown[], template: string): string {
   return items.map((i) => renderTemplateLine(i, template)).join("\n");
 }
 
+/**
+ * Validate `--field` (v0.5.6) and return the single key it selects.
+ *
+ * `--field` (scalar extraction) sits one letter from the long-standing
+ * `--fields` (column projection), which is a genuine footgun. Rather than leave
+ * a mix-up to fail silently, every confusable combination is rejected loudly:
+ * a comma in the value, or pairing `--field` with `--fields` or `--template`.
+ *
+ * @throws ValidationError naming the flag the user probably meant.
+ */
+export function resolveFieldOpt(opts: Record<string, unknown>): string | undefined {
+  const raw = opts.field as string | undefined;
+  if (raw === undefined) return undefined;
+
+  const key = raw.trim();
+  if (key === "") {
+    throw new ValidationError("--field needs a key, e.g. --field ref.");
+  }
+  if (key.includes(",")) {
+    throw new ValidationError(
+      `--field takes a single key and prints one raw value per row; ` +
+        `did you mean --fields ${key} (column projection)?`,
+    );
+  }
+  if (opts.fields !== undefined) {
+    throw new ValidationError(
+      "--field (one raw value per row) and --fields (column projection) do things different " +
+        "enough that combining them is almost certainly a mistake. Pass one or the other.",
+    );
+  }
+  if (opts.template !== undefined) {
+    throw new ValidationError("--field and --template are two ways to say the same thing; pass one.");
+  }
+  return key;
+}
+
+/** Extract one raw value per item — no header, no quoting, xargs-friendly. */
+export function renderField(items: unknown[], key: string): string {
+  return items.map((i) => templateValue(lookupPath(i, key))).join("\n");
+}
+
 /** True when `--no-header` was passed (commander stores it as `header === false`). */
 export function headersSuppressed(opts: Record<string, unknown>): boolean {
   return opts.header === false || opts.quiet === true;
@@ -182,6 +223,12 @@ export function enableOutputFormats(program: Command): string[] {
 
     // The rendering flags only make sense where there is rendered output.
     if (!longs.includes("--output")) continue;
+    if (!longs.includes("--field")) {
+      cmd.option(
+        "--field <key>",
+        "Print one raw value per row (singular; --fields projects columns)",
+      );
+    }
     if (!longs.includes("--template")) {
       cmd.option("--template <tpl>", "Render each row with a {{.field}} template");
     }

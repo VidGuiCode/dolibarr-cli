@@ -4,6 +4,8 @@ import {
   enableOutputFormats,
   headersSuppressed,
   lookupPath,
+  renderField,
+  resolveFieldOpt,
   renderNdjson,
   renderTemplate,
   renderTemplateLine,
@@ -175,6 +177,57 @@ describe("templates", () => {
   });
 });
 
+describe("resolveFieldOpt (the --field / --fields collision)", () => {
+  it("returns the key when unambiguous", () => {
+    expect(resolveFieldOpt({ field: "ref" })).toBe("ref");
+    expect(resolveFieldOpt({ field: "  ref  " })).toBe("ref");
+  });
+
+  it("is undefined when --field is absent", () => {
+    expect(resolveFieldOpt({})).toBeUndefined();
+    expect(resolveFieldOpt({ fields: "id,ref" })).toBeUndefined();
+  });
+
+  it("rejects an empty key", () => {
+    expect(() => resolveFieldOpt({ field: "  " })).toThrow(/needs a key/);
+  });
+
+  it("catches the likely typo and names --fields", () => {
+    // The whole point: `--field id,ref` must not silently do something odd.
+    expect(() => resolveFieldOpt({ field: "id,ref" })).toThrow(/did you mean --fields id,ref/);
+  });
+
+  it("rejects combining --field with --fields", () => {
+    expect(() => resolveFieldOpt({ field: "id", fields: "id,ref" })).toThrow(ValidationError);
+  });
+
+  it("rejects combining --field with --template", () => {
+    expect(() => resolveFieldOpt({ field: "id", template: "{{.id}}" })).toThrow(ValidationError);
+  });
+});
+
+describe("renderField", () => {
+  it("prints one raw value per row, unquoted and headerless", () => {
+    expect(renderField([{ id: "16" }, { id: "17" }], "id")).toBe("16\n17");
+  });
+
+  it("renders a missing key as an empty line rather than failing", () => {
+    expect(renderField([{ id: 1 }, {}], "id")).toBe("1\n");
+  });
+
+  it("walks a nested path", () => {
+    expect(renderField([{ a: { b: "x" } }], "a.b")).toBe("x");
+  });
+
+  it("serialises an object value as JSON", () => {
+    expect(renderField([{ a: { b: 1 } }], "a")).toBe('{"b":1}');
+  });
+
+  it("returns an empty string for no rows", () => {
+    expect(renderField([], "id")).toBe("");
+  });
+});
+
 describe("headersSuppressed", () => {
   it("is true for --no-header (commander stores header:false) and for --quiet", () => {
     expect(headersSuppressed({ header: false })).toBe(true);
@@ -267,6 +320,27 @@ describe("renderList honours the new formats", () => {
     expect(out).toContain("ID");
   });
 
+  it("emits one raw value per row for --field", () => {
+    const out = capture(() => renderList(ROWS, { columns: COLUMNS, opts: { field: "ref" } }));
+    expect(out.trim().split("\n")).toEqual(["A", "B"]);
+  });
+
+  it("lets --field win over --output", () => {
+    const out = capture(() =>
+      renderList(ROWS, { columns: COLUMNS, opts: { field: "id", output: "json" } }),
+    );
+    expect(out.trim().split("\n")).toEqual(["1", "2"]);
+  });
+
+  it("keeps --fields meaning column projection, untouched by --field's arrival", () => {
+    const out = capture(() =>
+      renderList(ROWS, { columns: COLUMNS, opts: { fields: "id,ref" } }),
+    );
+    expect(out).toContain("id");
+    expect(out).toContain("ref");
+    expect(out).toContain("A");
+  });
+
   it("prints nothing at all for an empty ndjson result", () => {
     expect(capture(() => renderList([], { columns: COLUMNS, opts: { output: "ndjson" } }))).toBe(
       "",
@@ -292,6 +366,11 @@ describe("renderGet honours the new formats", () => {
 
   it("applies a template", () => {
     const out = capture(() => renderGet(ROWS[0], { fields: FIELDS, opts: { template: "{{.ref}}" } }));
+    expect(out.trim()).toBe("A");
+  });
+
+  it("emits a single raw value for --field", () => {
+    const out = capture(() => renderGet(ROWS[0], { fields: FIELDS, opts: { field: "ref" } }));
     expect(out.trim()).toBe("A");
   });
 

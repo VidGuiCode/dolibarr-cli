@@ -4,6 +4,8 @@ import { ask } from "./prompt.js";
 import { printCsv, printInfo, printJson, printLines, printTable } from "./output.js";
 import {
   headersSuppressed,
+  renderField,
+  resolveFieldOpt,
   renderNdjson,
   renderTemplate,
   renderTemplateLine,
@@ -150,8 +152,16 @@ export function renderList(
   config: { columns: ColumnSpec[]; opts: Record<string, unknown> },
 ): void {
   const output = resolveOutput(config.opts);
-  const fields = parseFields(config.opts);
   const noHeader = headersSuppressed(config.opts);
+
+  // --field is the most specific request there is: one raw value per row.
+  const field = resolveFieldOpt(config.opts);
+  if (field) {
+    printLines(renderField(items, field));
+    return;
+  }
+
+  const fields = parseFields(config.opts);
 
   // --template wins over --output: it *is* the output format.
   const template = config.opts.template as string | undefined;
@@ -200,8 +210,15 @@ export function renderGet(
   config: { fields: ColumnSpec[]; opts: Record<string, unknown> },
 ): void {
   const output = resolveOutput(config.opts);
-  const projected = parseFields(config.opts);
   const noHeader = headersSuppressed(config.opts);
+
+  const field = resolveFieldOpt(config.opts);
+  if (field) {
+    printLines(renderField([item], field));
+    return;
+  }
+
+  const projected = parseFields(config.opts);
 
   const template = config.opts.template as string | undefined;
   if (template) {
