@@ -53,10 +53,15 @@ MRP and knowledge tables.
 - Non-status verbs that happen to take an id (`add-line`, `add`, `create`, `set-rate`) get
   **no** selector: "add a line to every draft" is not a status transition, and keeping them
   id-only keeps one flag's blast radius comprehensible.
+- **A failed selection degrades gracefully.** Resolving `--all-<status>` is an API call made
+  outside any command's own error handling, so a `403` from a permission-gated module is
+  routed through the standard hinted-error path (exit `2`) rather than surfacing as an
+  unhandled rejection. Caught during release verification against a gated module and covered
+  by a regression test.
 
 ### Tests
 
-514 tests (up from 459). **All 420 pre-existing tests still pass unchanged.** Added the
+516 tests (up from 459). **All 420 pre-existing tests still pass unchanged.** Added the
 status vocabulary suite (including a **drift test** that parses each command file's own
 `STATUS_MAP` and fails if core's codes diverge — currently agreeing across 17 resources),
 selection-engine tests (truncation detection, 404-as-empty, filter composition, `--max`

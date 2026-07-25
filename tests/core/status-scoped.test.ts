@@ -212,6 +212,41 @@ describe("status-scoped run", () => {
     expect(stderr.mock.calls.flat().join("\n")).toMatch(/missing required argument/i);
   });
 
+  it("degrades gracefully when the selection call is permission-gated", async () => {
+    // Resolving a selection is an API call outside any command's own try/catch.
+    // A 403 here must produce the normal hinted error and exit 2, never an
+    // unhandled rejection with a stack trace.
+    const program = fixture(() => {});
+    vi.spyOn(globalThis, "fetch").mockImplementation(
+      async () => new Response("Forbidden", { status: 403 }),
+    );
+    const exit = vi.spyOn(process, "exit").mockImplementation((() => {}) as never);
+    const err = vi.spyOn(console, "error").mockImplementation(() => {});
+    vi.spyOn(console, "log").mockImplementation(() => {});
+
+    await expect(
+      program.parseAsync(["invoices", "validate", "--all-draft", "--confirm"], { from: "user" }),
+    ).resolves.toBeDefined();
+
+    expect(exit).toHaveBeenCalledWith(2);
+    expect(err.mock.calls.flat().join("\n")).toMatch(/Permission denied|403/);
+  });
+
+  it("degrades gracefully in JSON mode too", async () => {
+    const program = fixture(() => {});
+    vi.spyOn(globalThis, "fetch").mockImplementation(
+      async () => new Response("Forbidden", { status: 403 }),
+    );
+    const exit = vi.spyOn(process, "exit").mockImplementation((() => {}) as never);
+    const err = vi.spyOn(console, "error").mockImplementation(() => {});
+    vi.spyOn(console, "log").mockImplementation(() => {});
+    await program.parseAsync(["invoices", "validate", "--all-draft", "--confirm", "--json"], {
+      from: "user",
+    });
+    expect(exit).toHaveBeenCalledWith(2);
+    expect(JSON.parse(err.mock.calls.at(-1)![0] as string)).toMatchObject({ status: "error" });
+  });
+
   it("leaves the plain single-id path completely alone", async () => {
     const seen: string[] = [];
     const program = fixture((id) => {

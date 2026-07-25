@@ -2,6 +2,7 @@ import type { Command } from "commander";
 import { printError, printInfo, printJson } from "./output.js";
 import {
   DolibarrApiError,
+  exitWithError,
   getErrorMessage,
   getExitCode,
   NonInteractiveError,
@@ -565,7 +566,10 @@ export function enableBatchIds(program: Command): string[] {
           else printError(err.message);
           return process.exit(getExitCode(err));
         }
-        throw err;
+        // Resolving a status selection is an API call made outside any command's
+        // own try/catch, so a 403 from a permission-gated module would otherwise
+        // surface as an unhandled rejection instead of the usual hinted error.
+        return exitWithError(err, isJsonMode(opts));
       }
     };
 
