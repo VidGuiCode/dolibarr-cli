@@ -325,6 +325,10 @@ dolibarr orders delete 5,6,7 --confirm
 A single id behaves exactly as it always has — the batch path is only taken when the
 argument contains a comma.
 
+> **PowerShell users:** quote the list — `dolibarr invoices validate "12,13,14" --confirm`.
+> PowerShell parses a bare `12,13,14` as an array literal and splits it into separate
+> arguments before the CLI ever sees it. Bash, zsh and fish need no quoting.
+
 Batch runs are deliberately loud:
 
 - **`--dry-run` prints every resolved target** and the request each one would send — not a
