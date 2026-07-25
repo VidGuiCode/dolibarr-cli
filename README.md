@@ -490,6 +490,45 @@ dolibarr invoices list --all --from 2026-01-01 --to 2026-12-31 --fields id,ref,t
 - **Progress and warnings go to stderr**, so `--all` output stays a clean data stream:
   `dolibarr thirdparties list --all --output csv > out.csv` writes only CSV to the file.
 
+### Bulk create from a file or a pipe
+
+`--from-json` accepts a **JSON array**, and `--stdin` reads records from a pipe as NDJSON:
+
+```bash
+# one call per array entry
+dolibarr thirdparties create --from-json batch.json --confirm
+
+# stream NDJSON in
+cat rows.ndjson | dolibarr thirdparties create --stdin --confirm
+
+# preview first — prints the body of every record
+dolibarr thirdparties create --from-json batch.json --dry-run
+```
+
+`--stdin` accepts NDJSON (one JSON object per line), a JSON array, or a single object.
+
+A **single JSON object** in `--from-json` behaves exactly as it always has — no
+confirmation, no batch report. Bulk behaviour only kicks in for more than one record, and
+then it follows the same rules as every other bulk operation here: full dry-run listing,
+required `--confirm`, per-item outcome, exit `5` on partial success.
+
+Under `--output json` each result carries the command's own output, so a bulk create hands
+back the new ids:
+
+```json
+{
+  "batch": true, "action": "thirdparties create",
+  "total": 2, "succeeded": 2, "failed": 0, "exitCode": 0,
+  "results": [
+    { "id": "#1 Acme Ltd", "ok": true, "output": 41 },
+    { "id": "#2 Globex",   "ok": true, "output": 42 }
+  ]
+}
+```
+
+> `supplier-orders receive --from-json` is excluded: there an array already means *the lines
+> of one receipt*, and splitting it would change what the command does.
+
 ## Exit Codes
 
 | Code | Meaning |

@@ -44,6 +44,7 @@ import {
 import { enableBatchIds } from "./core/batch.js";
 import { enableListFilters } from "./core/list-filters.js";
 import { enableAutoPaginate } from "./core/paginate.js";
+import { enableBulkInput } from "./core/bulk-input.js";
 
 const require = createRequire(import.meta.url);
 const pkg = require("../package.json") as { version: string };
@@ -105,6 +106,10 @@ program.addCommand(createMulticurrenciesCommand());
 program.addCommand(createKnowledgeCommand());
 program.addCommand(createMrpCommand());
 program.addCommand(createUpgradeCommand());
+
+// Innermost: splits an array/NDJSON payload into single-record runs, so an
+// outer batch over ids applies every record to each id.
+enableBulkInput(program);
 
 // One edit, all 33 groups: wire comma-separated batch ids into every mutating
 // subcommand whose sole required positional is <id>.

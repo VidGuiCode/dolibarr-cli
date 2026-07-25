@@ -1,5 +1,67 @@
 # Changelog
 
+## 0.5.4 - 2026-07-25
+
+Fifth release of the **0.5.x line**. **Bulk create**: `--from-json` accepts an array, and
+`--stdin` reads NDJSON from a pipe.
+
+```bash
+dolibarr thirdparties create --from-json batch.json --confirm
+cat rows.ndjson | dolibarr thirdparties create --stdin --confirm
+```
+
+### Added
+
+- **`src/core/bulk-input.ts`** — record parsing, stdin reading and wiring. Exports
+  `parseRecords`, `recordsFromFile`, `readStdin`, `recordLabel`, `acceptsBulkInput` and
+  `enableBulkInput`.
+- **Array `--from-json`** and **`--stdin`** on every command that takes `--from-json` —
+  **34 commands across 27 groups** — wired from one call in `src/cli.ts`.
+- **`--confirm`** added to the bulk-capable commands that lacked it, since a multi-record
+  run is a bulk mutation.
+- **Per-item `output` in the batch envelope** (`src/core/batch.ts`): each result now carries
+  what that item printed, parsed as JSON when it is JSON. A bulk create therefore hands back
+  the new ids — the reason to run one. This enriches v0.5.0/v0.5.1 batches too.
+
+### How it reaches every group without editing them
+
+All 35 `--from-json` commands read their body the same way
+(`JSON.parse(fs.readFileSync(opts.fromJson))`). Bulk input writes each record to its own
+scratch file and re-points `--from-json` at it, so every command builds its body through its
+existing, already-tested code path — no command file was touched.
+
+### Behaviour notes
+
+- **A single JSON object is untouched.** Bulk mode engages only when the payload is an array
+  (or `--stdin` yields more than one record). A one-record payload runs the plain
+  single-record path with no confirmation and no batch report.
+- `--stdin` accepts NDJSON, a JSON array, or a single object — including pretty-printed
+  JSON spanning several lines.
+- Malformed input is rejected **before any record is sent**, naming the offending array entry
+  or NDJSON line number (exit `3`).
+- Multi-record runs follow the line's standard contract: full dry-run listing of every
+  record's body, required `--confirm`, per-item outcome, exit `5` on partial success.
+- **`supplier-orders receive` is excluded.** Its `--from-json` array already means *the lines
+  of one receipt*; splitting it would silently change the command's meaning. Covered by a
+  test, and it keeps its old behaviour exactly.
+
+### Tests
+
+631 tests (up from 598). **All 420 pre-existing tests still pass unchanged.** Added the
+record-parsing suite (array, NDJSON, CRLF, blank lines, pretty-printed single object, empty
+array, bare scalars, non-object entries, per-line error positions) and reach tests that
+`--stdin` lands on every `--from-json` command except the exclusion, never on anything else,
+and never duplicated.
+
+### Verified live
+
+Exercised against Dolibarr 20.0.4 with `CLIBULK-` fixtures: a two-record array create
+returning both new ids in the envelope, a deliberate partial run (one valid record, one
+missing a required field) returning **exit 5** with the API's reason per item, and the
+non-interactive refusal without `--confirm`. Fixtures were then batch-deleted and the
+resource verified back to its pre-test contents. Also confirmed `supplier-orders receive`
+still sends its array as `body.lines` rather than splitting it.
+
 ## 0.5.3 - 2026-07-25
 
 Fourth release of the **0.5.x line**. **`--all` auto-pagination** on every paginated `list`.

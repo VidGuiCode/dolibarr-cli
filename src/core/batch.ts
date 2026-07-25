@@ -84,6 +84,12 @@ export interface BatchItemResult {
   error?: string;
   /** Structured error payload when the item failed in JSON mode. */
   detail?: unknown;
+  /**
+   * What the item printed, in JSON mode where its own stdout is captured.
+   * For a bulk create this is the new record's id, which is the whole point of
+   * running one.
+   */
+  output?: unknown;
 }
 
 /**
@@ -155,6 +161,21 @@ export function batchExitCode(results: BatchItemResult[]): number {
   return failed[0].exitCode ?? 1;
 }
 
+/**
+ * Turn a captured item's stdout into a reportable value: parsed JSON when it is
+ * JSON (a create prints its new id), the raw text otherwise, undefined when the
+ * item printed nothing.
+ */
+export function parseCaptured(lines: string[]): unknown {
+  const text = lines.join("\n").trim();
+  if (!text) return undefined;
+  try {
+    return JSON.parse(text);
+  } catch {
+    return text;
+  }
+}
+
 /** Thrown in place of process.exit() while a batch item is running. */
 class BatchItemExit extends Error {
   constructor(public readonly code: number) {
@@ -178,11 +199,12 @@ function isJsonMode(opts: Record<string, unknown>): boolean {
 async function runItem(
   fn: () => Promise<unknown>,
   captureStdout: boolean,
-): Promise<{ ok: boolean; exitCode?: number; error?: string; detail?: unknown }> {
+): Promise<{ ok: boolean; exitCode?: number; error?: string; detail?: unknown; output?: unknown }> {
   const origExit = process.exit;
   const origLog = console.log;
   const origError = console.error;
   let lastError = "";
+  const captured: string[] = [];
 
   process.exit = ((code?: number) => {
     throw new BatchItemExit(code ?? 0);
@@ -191,11 +213,15 @@ async function runItem(
     lastError = args.map((a) => String(a)).join(" ");
     if (!captureStdout) origError(...args);
   };
-  if (captureStdout) console.log = () => {};
+  if (captureStdout) {
+    console.log = (...args: unknown[]) => {
+      captured.push(args.map((a) => String(a)).join(" "));
+    };
+  }
 
   try {
     await fn();
-    return { ok: true };
+    return { ok: true, output: parseCaptured(captured) };
   } catch (err) {
     if (err instanceof BatchItemExit) {
       if (err.code === 0) return { ok: true };

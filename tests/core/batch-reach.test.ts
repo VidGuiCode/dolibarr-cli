@@ -13,6 +13,7 @@ import {
 import { specForPath, statusFlag } from "../../src/core/statuses.js";
 import { enableListFilters, filterSpecForPath } from "../../src/core/list-filters.js";
 import { enableAutoPaginate, isPaginatedList } from "../../src/core/paginate.js";
+import { BULK_INPUT_EXCLUDED, enableBulkInput } from "../../src/core/bulk-input.js";
 
 /**
  * Reach test for the 0.5.x line: rather than spot-checking one group, rebuild the
@@ -50,6 +51,7 @@ let leaves: { path: string; cmd: Command }[];
 let batchableBefore: string[];
 let filterWired: string[];
 let pageWired: string[];
+let bulkWired: string[];
 
 // Vite needs a statically analysable glob; the cli.ts parse above still decides
 // which of these actually get registered.
@@ -68,6 +70,7 @@ beforeAll(async () => {
   }
   leaves = walkLeaves(program);
   batchableBefore = leaves.filter((l) => isBatchable(l.cmd)).map((l) => l.path).sort();
+  bulkWired = enableBulkInput(program);
   wired = enableBatchIds(program);
   // Same order as cli.ts, so the reach assertions see the real shipped surface.
   filterWired = enableListFilters(program);
@@ -315,6 +318,49 @@ describe("auto-paginate reach (v0.5.3)", () => {
       const longs = cmd.options.map((o) => o.long);
       expect(longs, `${p}`).toContain("--limit");
       expect(longs, `${p}`).toContain("--page");
+    }
+  });
+});
+
+describe("bulk-input reach (v0.5.4)", () => {
+  it("reaches every --from-json command except the documented exclusion", () => {
+    const expected = leaves
+      .filter((l) => l.cmd.options.some((o) => o.long === "--from-json"))
+      .map((l) => l.path)
+      .filter((p) => !BULK_INPUT_EXCLUDED.has(p))
+      .sort();
+    expect(bulkWired.sort()).toEqual(expected);
+    expect(bulkWired.length).toBeGreaterThan(30);
+    expect(new Set(bulkWired.map((p) => p.split(" ")[0])).size).toBeGreaterThanOrEqual(25);
+  });
+
+  it("gives every wired command --stdin and --confirm", () => {
+    for (const p of bulkWired) {
+      const cmd = leaves.find((l) => l.path === p)!.cmd;
+      const longs = cmd.options.map((o) => o.long);
+      expect(longs, `${p} missing --stdin`).toContain("--stdin");
+      expect(longs, `${p} missing --confirm`).toContain("--confirm");
+    }
+  });
+
+  it("leaves supplier-orders receive out, preserving its array semantics", () => {
+    expect(bulkWired).not.toContain("supplier-orders receive");
+    const recv = leaves.find((l) => l.path === "supplier-orders receive")!.cmd;
+    expect(recv.options.map((o) => o.long)).not.toContain("--stdin");
+  });
+
+  it("never adds --stdin to a command without --from-json", () => {
+    for (const { path: p, cmd } of leaves) {
+      if (cmd.options.some((o) => o.long === "--from-json")) continue;
+      expect(cmd.options.map((o) => o.long), `${p}`).not.toContain("--stdin");
+    }
+  });
+
+  it("registers no duplicate option on any bulk-wired command", () => {
+    for (const p of bulkWired) {
+      const cmd = leaves.find((l) => l.path === p)!.cmd;
+      const longs = cmd.options.map((o) => o.long).filter(Boolean);
+      expect(new Set(longs).size, `${p} has duplicate flags`).toBe(longs.length);
     }
   });
 });
