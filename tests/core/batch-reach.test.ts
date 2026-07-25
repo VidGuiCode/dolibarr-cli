@@ -14,6 +14,7 @@ import { specForPath, statusFlag } from "../../src/core/statuses.js";
 import { enableListFilters, filterSpecForPath } from "../../src/core/list-filters.js";
 import { enableAutoPaginate, isPaginatedList } from "../../src/core/paginate.js";
 import { BULK_INPUT_EXCLUDED, enableBulkInput } from "../../src/core/bulk-input.js";
+import { enableOutputFormats } from "../../src/core/formats.js";
 
 /**
  * Reach test for the 0.5.x line: rather than spot-checking one group, rebuild the
@@ -52,6 +53,7 @@ let batchableBefore: string[];
 let filterWired: string[];
 let pageWired: string[];
 let bulkWired: string[];
+let formatWired: string[];
 
 // Vite needs a statically analysable glob; the cli.ts parse above still decides
 // which of these actually get registered.
@@ -75,6 +77,7 @@ beforeAll(async () => {
   // Same order as cli.ts, so the reach assertions see the real shipped surface.
   filterWired = enableListFilters(program);
   pageWired = enableAutoPaginate(program);
+  formatWired = enableOutputFormats(program);
 });
 
 describe("batch reach across every registered command group", () => {
@@ -359,6 +362,46 @@ describe("bulk-input reach (v0.5.4)", () => {
   it("registers no duplicate option on any bulk-wired command", () => {
     for (const p of bulkWired) {
       const cmd = leaves.find((l) => l.path === p)!.cmd;
+      const longs = cmd.options.map((o) => o.long).filter(Boolean);
+      expect(new Set(longs).size, `${p} has duplicate flags`).toBe(longs.length);
+    }
+  });
+});
+
+describe("output-format reach (v0.5.5)", () => {
+  it("adds --quiet to every leaf command in the CLI", () => {
+    for (const { path: p, cmd } of leaves) {
+      expect(cmd.options.map((o) => o.long), `${p} missing --quiet`).toContain("--quiet");
+    }
+  });
+
+  it("adds --template/--no-header to every command that renders output", () => {
+    const rendering = leaves.filter((l) => l.cmd.options.some((o) => o.long === "--output"));
+    expect(rendering.length).toBeGreaterThan(70);
+    for (const { path: p, cmd } of rendering) {
+      const longs = cmd.options.map((o) => o.long);
+      expect(longs, `${p} missing --template`).toContain("--template");
+      expect(longs, `${p} missing --no-header`).toContain("--no-header");
+    }
+    expect(formatWired.sort()).toEqual(rendering.map((l) => l.path).sort());
+  });
+
+  it("does not add rendering flags where there is nothing to render", () => {
+    for (const { path: p, cmd } of leaves) {
+      if (cmd.options.some((o) => o.long === "--output")) continue;
+      expect(cmd.options.map((o) => o.long), `${p}`).not.toContain("--template");
+    }
+  });
+
+  it("advertises the new formats in the --output description", () => {
+    const list = leaves.find((l) => l.path === "invoices list")!.cmd;
+    const opt = list.options.find((o) => o.long === "--output")!;
+    expect(opt.description).toContain("ndjson");
+    expect(opt.description).toContain("yaml");
+  });
+
+  it("registers no duplicate option anywhere after all five wiring layers", () => {
+    for (const { path: p, cmd } of leaves) {
       const longs = cmd.options.map((o) => o.long).filter(Boolean);
       expect(new Set(longs).size, `${p} has duplicate flags`).toBe(longs.length);
     }

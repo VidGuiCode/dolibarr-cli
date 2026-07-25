@@ -39,6 +39,16 @@ export function printErrorJson(error: unknown): void {
   console.error(JSON.stringify(errorObj, null, 2));
 }
 
+/**
+ * Write already-formatted text as one block, adding a single trailing newline.
+ * Used by the pipeline formats (ndjson/yaml/template), which control their own
+ * line structure. An empty payload prints nothing at all.
+ */
+export function printLines(text: string): void {
+  if (text === "") return;
+  process.stdout.write(text + "\n");
+}
+
 export function printJson(value: unknown): void {
   console.log(JSON.stringify(value, null, isCompactMode() ? undefined : 2));
 }

@@ -1,4 +1,4 @@
-export type OutputFormat = "table" | "json" | "csv";
+export type OutputFormat = "table" | "json" | "csv" | "ndjson" | "yaml";
 
 export interface GlobalOptions {
   output?: OutputFormat;

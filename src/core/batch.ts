@@ -8,7 +8,7 @@ import {
   NonInteractiveError,
   ValidationError,
 } from "./errors.js";
-import { isDryRunEnabled, isNonInteractiveMode } from "./runtime.js";
+import { isDryRunEnabled, isNonInteractiveMode, isQuiet } from "./runtime.js";
 import { ask } from "./prompt.js";
 import { createClient } from "./config-store.js";
 import { walkLeaves } from "./command-tree.js";
@@ -252,7 +252,8 @@ export async function runBatch(
   const json = isJsonMode(opts);
   const dryRun = isDryRunEnabled();
 
-  if (!json) {
+  const chatty = !json && !isQuiet();
+  if (chatty) {
     printInfo(`Batch ${action}: ${ids.length} record(s) selected`);
     for (const id of ids) printInfo(`  - ${id}`);
   }
@@ -274,7 +275,7 @@ export async function runBatch(
 
   const results: BatchItemResult[] = [];
   for (const id of ids) {
-    if (!json) printInfo(`\n→ ${action} ${id}`);
+    if (chatty) printInfo(`\n→ ${action} ${id}`);
     const r = await runItem(() => perItem(id), json);
     results.push({ id, ...r });
     if (!json && !r.ok) printError(`${action} ${id} failed: ${r.error || "unknown error"}`);
@@ -294,7 +295,7 @@ export async function runBatch(
       exitCode: code,
       results,
     });
-  } else {
+  } else if (chatty) {
     printInfo(
       `\nBatch ${action}: ${succeeded} succeeded, ${results.length - succeeded} failed, ` +
         `${results.length} total`,

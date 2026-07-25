@@ -1,5 +1,74 @@
 # Changelog
 
+## 0.5.5 - 2026-07-25
+
+Sixth release of the **0.5.x line**. **Pipeline output formats**: `ndjson`, `yaml`,
+`--template`, `--no-header` and `--quiet`.
+
+```bash
+dolibarr thirdparties list --all --output ndjson > thirdparties.ndjson
+dolibarr invoices list --template '{{.id}} {{.ref}}'
+dolibarr invoices list --output csv --no-header
+```
+
+### Added
+
+- **`src/core/formats.ts`** — hand-rolled ndjson, YAML and template rendering. Exports
+  `renderNdjson`, `toYaml`, `renderYaml`, `renderTemplate`, `renderTemplateLine`,
+  `lookupPath`, `validateTemplate`, `headersSuppressed` and `enableOutputFormats`.
+  No new runtime dependency; `commander` is still the only one.
+- **`--output ndjson`** and **`--output yaml`**, wired through `renderList` / `renderGet`, so
+  all 33 groups inherit them from one edit. `OutputFormat` in `src/core/types.ts` was
+  extended alongside `resolveOutput`, so the new values resolve rather than silently
+  printing a table.
+- **`--template <tpl>`** — Go-style `{{.field}}` substitution, one line per row, with
+  `{{.a.b}}` walking nested fields. Available on every command that renders output
+  (**76 commands**).
+- **`--no-header`** on the same set, and **`--quiet`** on **every leaf command** — `--quiet`
+  also silences the batch reporter, and those commands render through `--json` rather than
+  `--output`.
+- **`printLines`** in `src/core/output.ts` for formats that control their own line structure.
+
+### YAML quotes every string, deliberately
+
+Unquoted, `1.0` reads back as a number, `007` as `7`, `yes`/`no`/`on` as booleans, `null` and
+`~` as null, and `2024-01-01` as a date. Any of those would silently change the data in the
+middle of a pipeline — the exact failure mode this line exists to prevent. Strings are
+therefore quoted unconditionally: less pretty, and correct for every value Dolibarr returns.
+This was the "cut YAML if hand-rolling looks riskier than it's worth" decision from the
+roadmap; always-quoting removes the risk, so YAML ships.
+
+### Behaviour notes
+
+- **`--template` wins over `--output`** — it is the output format. A missing field renders
+  empty rather than failing the row, so one odd record never kills a stream. A template with
+  no placeholder, or one missing the leading dot, is rejected with exit `3`.
+- `--fields` composes with every new format.
+- **An unknown `--output` value still falls back to `table`**, exactly as since v0.2.0. The
+  pre-existing contract test for that behaviour is untouched — only `ndjson` and `yaml` were
+  added to the known set.
+- `--quiet` suppresses headers and the batch reporter's selection list, per-item lines and
+  summary. It deliberately does **not** suppress a command's own result, so a create still
+  prints its new id.
+- Empty results print nothing at all in `ndjson` rather than an empty line.
+
+### Tests
+
+685 tests (up from 631). **All 420 pre-existing tests still pass unchanged.** Added the
+formats suite (ndjson round-tripping, YAML escaping and the always-quote property asserted
+against nine type-coercion-prone values, nested `lines` arrays, empty containers, non-identifier
+keys, template nesting/missing fields/validation, header suppression) plus renderer tests
+proving `renderList`/`renderGet` honour each format, and reach tests that `--quiet` reaches
+every leaf command, the rendering flags reach every output-rendering command and nothing
+else, and that no duplicate flag exists anywhere after all five 0.5.x wiring layers.
+
+### Verified live
+
+Exercised against Dolibarr 20.0.4: ndjson output re-parsing to exactly the same data as
+`--output json`, YAML for both list and detail views, templates on list and `get`, headerless
+CSV and table, template validation rejected with exit 3, `--quiet` silencing batch chatter
+while leaving the data, and an unknown `--output` still rendering a table.
+
 ## 0.5.4 - 2026-07-25
 
 Fifth release of the **0.5.x line**. **Bulk create**: `--from-json` accepts an array, and

@@ -529,6 +529,45 @@ back the new ids:
 > `supplier-orders receive --from-json` is excluded: there an array already means *the lines
 > of one receipt*, and splitting it would change what the command does.
 
+## Pipeline output
+
+Beyond `table`, `json` and `csv`, read commands support formats built for pipelines:
+
+```bash
+# one JSON object per line — feed jq, or a while-read loop
+dolibarr thirdparties list --all --output ndjson > thirdparties.ndjson
+
+# YAML
+dolibarr invoices get 42 --output yaml
+
+# a Go-style template, one line per row
+dolibarr invoices list --template '{{.id}} {{.ref}}'
+
+# headerless CSV for a downstream importer
+dolibarr invoices list --output csv --no-header
+```
+
+| Flag | Meaning |
+|---|---|
+| `--output ndjson` | One compact JSON object per line |
+| `--output yaml` | YAML |
+| `--template '{{.ref}}'` | Render each row from a template; `{{.a.b}}` walks nested fields |
+| `--no-header` | Omit the header row from `table` / `csv` |
+| `--quiet` | Suppress headers and batch progress chatter; print data only |
+
+Notes:
+
+- `--template` takes precedence over `--output` — it *is* the output format. A missing field
+  renders empty rather than failing the row, so one odd record never kills a stream.
+- `--fields` composes with all of these, so `--fields id,ref --output ndjson` emits only
+  those keys.
+- **In YAML, every string is quoted.** Unquoted, values like `1.0`, `007`, `yes` or
+  `2024-01-01` would be read back as a number, boolean or date — silently changing your data
+  mid-pipeline. Quoting always is less pretty and always correct.
+- `--quiet` silences the batch reporter and table headers. It never suppresses a command's
+  actual result, so a create still prints its new id.
+- An unrecognised `--output` value still falls back to `table`, as it always has.
+
 ## Exit Codes
 
 | Code | Meaning |

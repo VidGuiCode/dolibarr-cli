@@ -1,7 +1,16 @@
 import type { Command } from "commander";
 import type { DolibarrApiClient } from "./api-client.js";
 import { ask } from "./prompt.js";
-import { printCsv, printInfo, printJson, printTable } from "./output.js";
+import { printCsv, printInfo, printJson, printLines, printTable } from "./output.js";
+import {
+  headersSuppressed,
+  renderNdjson,
+  renderTemplate,
+  renderTemplateLine,
+  renderYaml,
+  toYaml,
+  validateTemplate,
+} from "./formats.js";
 import { isDryRunEnabled } from "./runtime.js";
 import type { OutputFormat } from "./types.js";
 
@@ -23,7 +32,7 @@ export function prunePayload<T extends Record<string, unknown>>(body: T): T {
  */
 export function addListOptions(cmd: Command): Command {
   cmd
-    .option("--output <fmt>", "Output format: table|json|csv", "table")
+    .option("--output <fmt>", "Output format: table|json|csv|ndjson|yaml", "table")
     .option("--json", "Output as JSON (alias for --output json)")
     .option("--fields <keys>", "Comma-separated field keys to project (e.g. id,ref,total_ttc)")
     .option("--limit <n>", "Results per page", "50")
@@ -45,7 +54,7 @@ export function addListOptions(cmd: Command): Command {
  */
 export function addGetOptions(cmd: Command): Command {
   return cmd
-    .option("--output <fmt>", "Output format: table|json|csv", "table")
+    .option("--output <fmt>", "Output format: table|json|csv|ndjson|yaml", "table")
     .option("--json", "Output as JSON (alias for --output json)")
     .option("--fields <keys>", "Comma-separated field keys to project");
 }
@@ -81,9 +90,10 @@ export function buildListQuery(
  */
 export function resolveOutput(opts: Record<string, unknown>): OutputFormat {
   const raw = opts.output as string | undefined;
-  if (raw === "json" || raw === "csv") return raw;
+  if (raw === "json" || raw === "csv" || raw === "ndjson" || raw === "yaml") return raw;
   if (opts.json) return "json";
   if (raw === "table" || raw === undefined) return "table";
+  // Unknown values keep falling back to "table", as they have since v0.2.0.
   return "table";
 }
 
@@ -141,37 +151,40 @@ export function renderList(
 ): void {
   const output = resolveOutput(config.opts);
   const fields = parseFields(config.opts);
+  const noHeader = headersSuppressed(config.opts);
+
+  // --template wins over --output: it *is* the output format.
+  const template = config.opts.template as string | undefined;
+  if (template) {
+    const projected = fields ? items.map((i) => pickKeys(i, fields)) : items;
+    printLines(renderTemplate(projected, validateTemplate(template)));
+    return;
+  }
 
   if (fields) {
-    if (output === "json") {
-      printJson(items.map((i) => pickKeys(i, fields)));
-      return;
-    }
+    const projected = items.map((i) => pickKeys(i, fields));
+    if (output === "json") return printJson(projected);
+    if (output === "ndjson") return printLines(renderNdjson(projected));
+    if (output === "yaml") return printLines(renderYaml(projected));
     const rows = items.map((i) => fields.map((k) => stringifyField(i[k])));
-    if (output === "csv") printCsv(rows, fields);
-    else printTable(rows, fields);
+    if (output === "csv") printCsv(rows, noHeader ? undefined : fields);
+    else printTable(rows, noHeader ? undefined : fields);
     return;
   }
 
-  if (output === "json") {
-    printJson(items);
-    return;
-  }
+  if (output === "json") return printJson(items);
+  if (output === "ndjson") return printLines(renderNdjson(items));
+  if (output === "yaml") return printLines(renderYaml(items));
+
   const rows = items.map((i) =>
     config.columns.map((c) =>
       c.format ? c.format(i) : stringifyField(i[c.key]),
     ),
   );
   if (output === "csv") {
-    printCsv(
-      rows,
-      config.columns.map((c) => c.key),
-    );
+    printCsv(rows, noHeader ? undefined : config.columns.map((c) => c.key));
   } else {
-    printTable(
-      rows,
-      config.columns.map((c) => c.label),
-    );
+    printTable(rows, noHeader ? undefined : config.columns.map((c) => c.label));
   }
 }
 
@@ -188,38 +201,45 @@ export function renderGet(
 ): void {
   const output = resolveOutput(config.opts);
   const projected = parseFields(config.opts);
+  const noHeader = headersSuppressed(config.opts);
+
+  const template = config.opts.template as string | undefined;
+  if (template) {
+    const value = projected ? pickKeys(item, projected) : item;
+    printLines(renderTemplateLine(value, validateTemplate(template)));
+    return;
+  }
 
   if (projected) {
-    if (output === "json") {
-      printJson(pickKeys(item, projected));
-      return;
-    }
+    const picked = pickKeys(item, projected);
+    if (output === "json") return printJson(picked);
+    if (output === "ndjson") return printLines(renderNdjson([picked]));
+    if (output === "yaml") return printLines(toYaml(picked));
     if (output === "csv") {
-      printCsv([projected.map((k) => stringifyField(item[k]))], projected);
+      printCsv([projected.map((k) => stringifyField(item[k]))], noHeader ? undefined : projected);
       return;
     }
     const rows = projected.map((k) => [k, stringifyField(item[k])]);
-    printTable(rows, ["Field", "Value"]);
+    printTable(rows, noHeader ? undefined : ["Field", "Value"]);
     return;
   }
 
-  if (output === "json") {
-    printJson(item);
-    return;
-  }
+  if (output === "json") return printJson(item);
+  if (output === "ndjson") return printLines(renderNdjson([item]));
+  if (output === "yaml") return printLines(toYaml(item));
   if (output === "csv") {
     const keys = config.fields.map((f) => f.key);
     const row = config.fields.map((f) =>
       f.format ? f.format(item) : stringifyField(item[f.key]),
     );
-    printCsv([row], keys);
+    printCsv([row], noHeader ? undefined : keys);
     return;
   }
   const rows = config.fields.map((f) => [
     f.label,
     f.format ? f.format(item) : stringifyField(item[f.key]),
   ]);
-  printTable(rows, ["Field", "Value"]);
+  printTable(rows, noHeader ? undefined : ["Field", "Value"]);
 }
 
 /**
