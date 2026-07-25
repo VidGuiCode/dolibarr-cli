@@ -375,6 +375,53 @@ Ids must be positive integers in a list; a malformed list is rejected before **a
 is touched. Read commands (`get`, `list`, …) are not batched — their output shape is
 unchanged.
 
+### Status-scoped bulk
+
+Status transitions can select their own targets instead of taking ids. Each resource
+exposes one `--all-<status>` flag per status it actually has:
+
+```bash
+# validate every draft invoice
+dolibarr invoices validate --all-draft --confirm
+
+# preview first — always do this
+dolibarr invoices validate --all-draft --dry-run
+
+# close every validated order
+dolibarr orders close --all-validated --confirm
+```
+
+The status vocabulary is per-resource and is **not** a uniform `0..n` sequence — expense
+reports run `0/2/4/5/6/99`, members `-2/-1/0/1`, BOMs `0/1/9`. `--help` on any status-scoped
+command lists that resource's real statuses.
+
+Scope and cap the selection:
+
+| Flag | Purpose |
+|---|---|
+| `--filter <expr>` | Narrow the selection with an SQL filter, ANDed with the status |
+| `--max <n>` | Cap on records selected (default `100`) |
+
+```bash
+# only this month's drafts, at most 20 of them
+dolibarr invoices validate --all-draft \
+  --filter "(t.datef:>=:'20260701')" --max 20 --confirm
+```
+
+Selection rules:
+
+- **The resolved selection is printed before anything happens** — with `--dry-run` you get
+  every target id and the request each would send.
+- **A cap is never silent.** If more records matched than `--max` allowed, the run says so
+  explicitly and tells you how to continue.
+- An id and a selector are mutually exclusive, as are two selectors.
+- Zero matches is a success (exit `0`), not an error.
+
+> Selection filters server-side on the resource's own status column, so nothing that matched
+> can be silently skipped. Note that Dolibarr's own `list --status` query param expects
+> string tokens (`draft`, `paid`) and **silently ignores** a numeric value — the status-scoped
+> flags avoid that trap entirely.
+
 ## Exit Codes
 
 | Code | Meaning |

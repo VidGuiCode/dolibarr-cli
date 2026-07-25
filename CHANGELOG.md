@@ -1,5 +1,84 @@
 # Changelog
 
+## 0.5.1 - 2026-07-25
+
+Second release of the **0.5.x line**. **Status-scoped bulk**: select records by status, then
+act on them — no ids required.
+
+```bash
+dolibarr invoices validate --all-draft --dry-run
+dolibarr invoices validate --all-draft --confirm
+dolibarr orders close --all-validated --filter "(t.datec:>=:'20260101')" --max 20 --confirm
+```
+
+### Added
+
+- **`src/core/statuses.ts`** — the per-resource status vocabulary: list path, SQL status
+  column, and status-name → code map for **18 resources**. Exports `RESOURCE_STATUSES`,
+  `specForPath`, `buildStatusFilter`, `readStatus` and `statusFlag`.
+- **`--all-<status>` selectors** on every status-transition subcommand of a resource with a
+  known status vocabulary — **36 subcommands across 16 groups**, generated from the status
+  map rather than hand-written, so each resource gets exactly the statuses it really has.
+- **`--filter <expr>`** on those commands, ANDed with the status predicate, so a bulk run can
+  always be scoped to a subset.
+- **`--max <n>`** cap on selected records, default **100**. Exceeding it is reported
+  explicitly — the run states that it acted on the first N only and how to continue.
+- **`resolveStatusSelection`** and **`runStatusScoped`** in `src/core/batch.ts`, plus
+  `STATUS_SCOPED_VERBS`, `DEFAULT_SELECTION_CAP` and `camelize`.
+
+### Why selection filters on the status column, not `list --status`
+
+Verified on Dolibarr 20.0.4: the list endpoints' `status` query param expects **string
+tokens** (`draft`, `unpaid`, `paid`) and **silently ignores a numeric value** —
+`invoices list --status 0`, `--status 1` and `--status 2` all return the same rows. A bulk
+mutation driven by a silently-ignored filter is the worst failure mode this line could ship,
+so selection instead uses `sqlfilters` on the resource's own status column, where a wrong
+column fails loudly with a 503.
+
+The column is **not** uniform and was probed per resource: `fk_statut` for the
+invoice/order/proposal family, `statut` for contracts and members, `status` for the newer
+MRP and knowledge tables.
+
+### Behaviour notes
+
+- **The resolved selection is always printed before acting**, and `--dry-run` shows every
+  target id plus the request each would send.
+- **Caps are never silent.** Selection asks for `cap + 1` rows, so "more matched than the cap
+  allowed" is detected and announced rather than inferred.
+- **Zero matches exits `0`** and does nothing.
+- An id and a selector are mutually exclusive (exit `3`), as are two selectors.
+- `<id>` became optional **only** on status-scoped subcommands. Omitting it with no selector
+  still produces commander's own missing-argument error and **exit code 1**, exactly as
+  before — this is asserted by a test.
+- Non-status verbs that happen to take an id (`add-line`, `add`, `create`, `set-rate`) get
+  **no** selector: "add a line to every draft" is not a status transition, and keeping them
+  id-only keeps one flag's blast radius comprehensible.
+
+### Tests
+
+514 tests (up from 459). **All 420 pre-existing tests still pass unchanged.** Added the
+status vocabulary suite (including a **drift test** that parses each command file's own
+`STATUS_MAP` and fails if core's codes diverge — currently agreeing across 17 resources),
+selection-engine tests (truncation detection, 404-as-empty, filter composition, `--max`
+validation), and reach tests asserting every status-scoped command carries one flag per
+status, that `<id>` is optional exactly where a selector can replace it, and that no
+duplicate flag was registered anywhere.
+
+### Verified live
+
+Exercised against Dolibarr 20.0.4 on self-created invoice fixtures, every call scoped by
+`--filter` so it could only ever match those fixtures: dry-run target listing, cap
+truncation, zero-match, and a **real partial run returning exit 5** (one fixture validated,
+one rejected by Dolibarr for having no lines). Fixtures were then set back to draft and
+deleted, and the resource confirmed byte-identical to its pre-test contents.
+
+> ⚠️ **Status columns verified live for 9 resources** (invoices, supplier-invoices, orders,
+> proposals, projects, contracts, supplier-orders, expensereports, tasks). The columns for
+> `tickets`, `shipments`, `receptions`, `interventions`, `supplier-proposals`, `members`,
+> `knowledge` and `mrp` are **docs-sourced** — those modules are permission-gated on the
+> reference instance, so their selectors could not be exercised. A wrong column fails loudly
+> with a 503 rather than selecting the wrong records.
+
 ## 0.5.0 - 2026-07-25
 
 First release of the **0.5.x line — bulk, batch & scripting power**. Unlike 0.3.x and 0.4.x,

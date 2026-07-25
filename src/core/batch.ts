@@ -1,8 +1,21 @@
 import type { Command } from "commander";
 import { printError, printInfo, printJson } from "./output.js";
-import { getErrorMessage, getExitCode, NonInteractiveError, ValidationError } from "./errors.js";
+import {
+  DolibarrApiError,
+  getErrorMessage,
+  getExitCode,
+  NonInteractiveError,
+  ValidationError,
+} from "./errors.js";
 import { isDryRunEnabled, isNonInteractiveMode } from "./runtime.js";
 import { ask } from "./prompt.js";
+import { createClient } from "./config-store.js";
+import {
+  buildStatusFilter,
+  specForPath,
+  statusFlag,
+  type ResourceStatusSpec,
+} from "./statuses.js";
 
 /**
  * Exit code reserved for "some items applied, some failed". Distinct from a
@@ -267,6 +280,150 @@ export async function runBatch(
 }
 
 /**
+ * Verbs that may additionally be driven by a status selector (`--all-draft`).
+ * A subset of {@link BATCH_VERBS}: `add-line` / `add` / `create` / `set-rate`
+ * take an id but "add a line to every draft" is not a status transition, so they
+ * stay id-only to keep the blast radius of one flag comprehensible.
+ */
+export const STATUS_SCOPED_VERBS = new Set([
+  "validate",
+  "close",
+  "approve",
+  "reopen",
+  "set-draft",
+  "unpay",
+  "make-order",
+  "receive",
+  "set-status",
+  "pay",
+  "delete",
+  "update",
+]);
+
+/** Default ceiling on how many records one status-scoped run may touch. */
+export const DEFAULT_SELECTION_CAP = 100;
+
+/** Mirror commander's long-flag → opts-key conversion (`--all-in-progress` → allInProgress). */
+export function camelize(flag: string): string {
+  return flag
+    .replace(/^--/, "")
+    .split("-")
+    .map((part, i) => (i === 0 ? part : part.charAt(0).toUpperCase() + part.slice(1)))
+    .join("");
+}
+
+/** Outcome of resolving a status selector into concrete ids. */
+export interface StatusSelection {
+  ids: string[];
+  /** True when more records matched than the cap allowed. */
+  truncated: boolean;
+  cap: number;
+}
+
+/**
+ * Resolve `--all-<status>` into the ids it selects.
+ *
+ * The status predicate is applied **server-side** via sqlfilters, so fetching
+ * `cap + 1` rows is enough to both bound the run and detect that more matched —
+ * there is no window in which a matching record is silently skipped.
+ */
+export async function resolveStatusSelection(
+  spec: ResourceStatusSpec,
+  code: number,
+  userFilter: string | undefined,
+  cap: number,
+): Promise<StatusSelection> {
+  const client = createClient();
+  try {
+    const items = await client.get<Record<string, unknown>[]>(spec.path, {
+      limit: String(cap + 1),
+      page: "0",
+      sqlfilters: buildStatusFilter(spec, code, userFilter),
+    });
+    const rows = Array.isArray(items) ? items : [];
+    return {
+      ids: rows.slice(0, cap).map((i) => String(i.id ?? i.rowid ?? "")).filter(Boolean),
+      truncated: rows.length > cap,
+      cap,
+    };
+  } catch (err) {
+    // Several Dolibarr list endpoints answer an empty result set with 404.
+    if (err instanceof DolibarrApiError && err.status === 404) {
+      return { ids: [], truncated: false, cap };
+    }
+    throw err;
+  }
+}
+
+/**
+ * Resolve a `--all-<status>` selector into ids, announce exactly what was
+ * selected, then hand off to {@link runBatch}.
+ *
+ * Selection is a read, so it runs even under `--dry-run` — previewing a
+ * status-scoped run is precisely when you most want to see the real targets.
+ */
+export async function runStatusScoped(
+  action: string,
+  spec: ResourceStatusSpec,
+  statusName: string,
+  opts: Record<string, unknown>,
+  cmd: Command,
+  perItem: (id: string) => Promise<unknown>,
+): Promise<never> {
+  const json = isJsonMode(opts);
+  const code = spec.statuses[statusName];
+  const rawMax = opts.max === undefined ? DEFAULT_SELECTION_CAP : Number(opts.max);
+  if (!Number.isFinite(rawMax) || rawMax < 1) {
+    throw new ValidationError(`--max must be a positive integer, got "${String(opts.max)}".`);
+  }
+  const cap = Math.floor(rawMax);
+
+  const selection = await resolveStatusSelection(
+    spec,
+    code,
+    opts.filter as string | undefined,
+    cap,
+  );
+
+  if (!json) {
+    printInfo(
+      `Selecting ${statusName} records (t.${spec.column} = ${code})` +
+        (opts.filter ? ` scoped by --filter ${String(opts.filter)}` : ""),
+    );
+  }
+
+  if (selection.ids.length === 0) {
+    if (json) {
+      printJson({
+        batch: true,
+        action,
+        selector: statusFlag(statusName),
+        dryRun: isDryRunEnabled(),
+        total: 0,
+        succeeded: 0,
+        failed: 0,
+        truncated: false,
+        exitCode: 0,
+        results: [],
+      });
+    } else {
+      printInfo(`No ${statusName} records matched — nothing to do.`);
+    }
+    return process.exit(0);
+  }
+
+  if (selection.truncated) {
+    const warning =
+      `More than ${cap} ${statusName} records matched. Acting on the first ${cap} only — ` +
+      `re-run to continue, or raise the cap with --max.`;
+    if (!json) printError(warning);
+    else printJson({ warning, truncated: true, cap });
+  }
+
+  return runBatch(action, selection.ids, opts, () => cmd.setOptionValue("confirm", true), perItem);
+}
+
+/**
  * True when `sub` is a leaf subcommand whose sole required positional is `<id>`
  * and whose verb is a known mutating one.
  */
@@ -311,28 +468,88 @@ export function enableBatchIds(program: Command): string[] {
     // reach test fails loudly if an upgrade ever breaks this wiring.
     const internal = cmd as unknown as {
       _actionHandler: ((args: unknown[]) => unknown) | null;
+      __bulkWired?: boolean;
     };
     const original = internal._actionHandler;
     if (typeof original !== "function") continue;
+    // Status-scoped wiring makes <id> optional, which would make isBatchable()
+    // false on a second pass; the marker keeps this idempotent regardless.
+    if (internal.__bulkWired) continue;
+    internal.__bulkWired = true;
 
     if (!cmd.options.some((o) => o.long === "--confirm")) {
       cmd.option("--confirm", "Skip confirmation prompt");
     }
     const idArg = cmd.registeredArguments[0];
     idArg.description = `${idArg.description || "Record ID"} (or a comma-separated list: 1,2,3)`;
+
+    // v0.5.1 — status-scoped selection, where the resource has a known status
+    // vocabulary and the verb is a status transition.
+    const spec = STATUS_SCOPED_VERBS.has(cmd.name()) ? specForPath(path) : undefined;
+    const statusNames = spec ? Object.keys(spec.statuses) : [];
+    if (spec) {
+      for (const name of statusNames) {
+        cmd.option(statusFlag(name), `Select every ${name} record instead of passing ids`);
+      }
+      if (!cmd.options.some((o) => o.long === "--filter")) {
+        cmd.option("--filter <expr>", "Scope the selection with an SQL filter expression");
+      }
+      if (!cmd.options.some((o) => o.long === "--max")) {
+        cmd.option("--max <n>", "Cap on selected records", String(DEFAULT_SELECTION_CAP));
+      }
+      // The id becomes optional so a selector can stand in for it. When neither
+      // is given we still raise commander's own missing-argument error below, so
+      // the pre-0.5.1 message and exit code are preserved.
+      idArg.required = false;
+    }
+
     cmd.addHelpText(
       "after",
       "\nBatch: pass a comma-separated id list (1,2,3) to apply this to several" +
         "\nrecords. Batch runs require --confirm (or a prompt), report per-item" +
-        "\noutcomes, and exit 5 when only some items succeeded.",
+        "\noutcomes, and exit 5 when only some items succeeded." +
+        (spec
+          ? `\n\nStatus-scoped: ${statusNames.map(statusFlag).join(", ")}` +
+            `\nselects by status instead of ids. Scope it with --filter, and cap it` +
+            `\nwith --max (default ${DEFAULT_SELECTION_CAP}); a truncated selection is always announced.`
+          : ""),
     );
 
     internal._actionHandler = async (args: unknown[]) => {
       const raw = args[0];
-      if (!isBatchInput(raw)) return original(args);
-
       const opts = cmd.opts() as Record<string, unknown>;
+
       try {
+        const chosen = statusNames.filter((n) => opts[camelize(statusFlag(n))]);
+        if (chosen.length > 0) {
+          if (chosen.length > 1) {
+            throw new ValidationError(
+              `Pick one status selector, got ${chosen.map(statusFlag).join(" and ")}.`,
+            );
+          }
+          if (raw !== undefined && raw !== null) {
+            throw new ValidationError(
+              `Pass either an id or ${statusFlag(chosen[0])}, not both.`,
+            );
+          }
+          return await runStatusScoped(
+            path,
+            spec!,
+            chosen[0],
+            opts,
+            cmd,
+            (id) => Promise.resolve(original([id, ...args.slice(1)])),
+          );
+        }
+
+        // No selector: an id is mandatory again, with commander's own error.
+        if (raw === undefined || raw === null) {
+          // Reuse commander's own missing-argument path so the message and the
+          // exit code match exactly what this command produced before v0.5.1.
+          (cmd as unknown as { missingArgument(name: string): never }).missingArgument("id");
+        }
+        if (!isBatchInput(raw)) return original(args);
+
         const ids = parseIdList(raw as string);
         if (ids.length === 1) return original([ids[0], ...args.slice(1)]);
         return await runBatch(

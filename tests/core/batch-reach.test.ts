@@ -5,10 +5,12 @@ import { Command } from "commander";
 import {
   BATCH_VERBS,
   READ_ONLY_ID_VERBS,
+  STATUS_SCOPED_VERBS,
   enableBatchIds,
   isBatchable,
   walkLeaves,
 } from "../../src/core/batch.js";
+import { specForPath, statusFlag } from "../../src/core/statuses.js";
 
 /**
  * Reach test for the 0.5.x line: rather than spot-checking one group, rebuild the
@@ -42,6 +44,8 @@ function registeredGroups(): [string, string][] {
 let program: Command;
 let wired: string[];
 let leaves: { path: string; cmd: Command }[];
+/** Snapshot taken *before* wiring — status-scoped wiring makes <id> optional. */
+let batchableBefore: string[];
 
 // Vite needs a statically analysable glob; the cli.ts parse above still decides
 // which of these actually get registered.
@@ -59,6 +63,7 @@ beforeAll(async () => {
     program.addCommand(mod[factory]());
   }
   leaves = walkLeaves(program);
+  batchableBefore = leaves.filter((l) => isBatchable(l.cmd)).map((l) => l.path).sort();
   wired = enableBatchIds(program);
 });
 
@@ -86,8 +91,7 @@ describe("batch reach across every registered command group", () => {
   });
 
   it("wires batch ids into every batchable subcommand and no others", () => {
-    const expected = leaves.filter((l) => isBatchable(l.cmd)).map((l) => l.path).sort();
-    expect(wired.sort()).toEqual(expected);
+    expect(wired.sort()).toEqual(batchableBefore);
     expect(wired.length).toBeGreaterThan(80);
   });
 
@@ -113,6 +117,65 @@ describe("batch reach across every registered command group", () => {
       const verb = p.split(" ").pop()!;
       expect(READ_ONLY_ID_VERBS.has(verb)).toBe(false);
     }
+  });
+});
+
+describe("status-scoped reach (v0.5.1)", () => {
+  /** Every wired leaf that should have gained `--all-<status>` flags. */
+  function expectedStatusScoped() {
+    return wired.filter((p) => {
+      const verb = p.split(" ").pop()!;
+      return STATUS_SCOPED_VERBS.has(verb) && specForPath(p) !== undefined;
+    });
+  }
+
+  it("covers a meaningful slice of the CLI, across many groups", () => {
+    const paths = expectedStatusScoped();
+    expect(paths.length).toBeGreaterThan(30);
+    expect(new Set(paths.map((p) => p.split(" ")[0])).size).toBeGreaterThanOrEqual(15);
+  });
+
+  it("gives every status-scoped command one --all-<status> flag per status", () => {
+    for (const p of expectedStatusScoped()) {
+      const cmd = leaves.find((l) => l.path === p)!.cmd;
+      const spec = specForPath(p)!;
+      const longs = cmd.options.map((o) => o.long);
+      for (const name of Object.keys(spec.statuses)) {
+        expect(longs, `${p} missing ${statusFlag(name)}`).toContain(statusFlag(name));
+      }
+      expect(longs, `${p} missing --filter`).toContain("--filter");
+      expect(longs, `${p} missing --max`).toContain("--max");
+    }
+  });
+
+  it("makes <id> optional only where a selector can replace it", () => {
+    const scoped = new Set(expectedStatusScoped());
+    for (const p of wired) {
+      const cmd = leaves.find((l) => l.path === p)!.cmd;
+      expect(cmd.registeredArguments[0].required, `${p}`).toBe(!scoped.has(p));
+    }
+  });
+
+  it("never registers a duplicate option on any wired command", () => {
+    for (const p of wired) {
+      const cmd = leaves.find((l) => l.path === p)!.cmd;
+      const longs = cmd.options.map((o) => o.long).filter(Boolean);
+      expect(new Set(longs).size, `${p} has duplicate flags`).toBe(longs.length);
+    }
+  });
+
+  it("adds no selector to a group without a status vocabulary", () => {
+    for (const p of wired) {
+      if (specForPath(p)) continue;
+      const cmd = leaves.find((l) => l.path === p)!.cmd;
+      expect(cmd.options.some((o) => o.long?.startsWith("--all-")), `${p}`).toBe(false);
+    }
+  });
+
+  it("adds no selector to a non-status verb even in a status-bearing group", () => {
+    const addLine = leaves.find((l) => l.path === "invoices add-line")!.cmd;
+    expect(addLine.options.some((o) => o.long?.startsWith("--all-"))).toBe(false);
+    expect(addLine.registeredArguments[0].required).toBe(true);
   });
 });
 
