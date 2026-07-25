@@ -1,5 +1,12 @@
 import type { DolibarrConfig } from "./types.js";
 import { DolibarrApiError, DolibarrAuthError } from "./errors.js";
+import {
+  AUTO_PAGE_SIZE,
+  finishProgress,
+  getAutoPaginate,
+  isPaginatedQuery,
+  reportProgress,
+} from "./paginate.js";
 
 export interface DolibarrClientOptions extends DolibarrConfig {
   retries?: number;
@@ -150,6 +157,17 @@ export class DolibarrApiClient {
     path: string,
     params?: Record<string, string | number | boolean | undefined>,
   ): Promise<T> {
+    const auto = getAutoPaginate();
+    if (auto.enabled && isPaginatedQuery(params)) {
+      return (await this.getAllPages(path, params!)) as T;
+    }
+    return this.getOnce<T>(path, params);
+  }
+
+  private async getOnce<T>(
+    path: string,
+    params?: Record<string, string | number | boolean | undefined>,
+  ): Promise<T> {
     const fullPath = path + this.buildQueryString(params);
     const res = await this.fetchWithRetry(fullPath);
     if (!res.ok) {
@@ -160,6 +178,55 @@ export class DolibarrApiClient {
       throw new DolibarrApiError(res.status, errorText, "GET", path, { response: errorText });
     }
     return res.json() as Promise<T>;
+  }
+
+  /**
+   * Walk every page of a list endpoint and return the concatenated rows.
+   *
+   * Used only when `--all` is active. `limit`/`page` from the caller are
+   * replaced with the auto page size — `--all` bypasses `--limit` by design.
+   * Stops on a short page (the last one), on the record cap, or on the 404 that
+   * several Dolibarr list endpoints return for an empty result.
+   */
+  private async getAllPages(
+    path: string,
+    params: Record<string, string | number | boolean | undefined>,
+  ): Promise<Record<string, unknown>[]> {
+    const { maxRecords } = getAutoPaginate();
+    const rows: Record<string, unknown>[] = [];
+    let page = 0;
+    let truncated = false;
+
+    for (;;) {
+      let batch: Record<string, unknown>[];
+      try {
+        batch = await this.getOnce<Record<string, unknown>[]>(path, {
+          ...params,
+          limit: AUTO_PAGE_SIZE,
+          page,
+        });
+      } catch (err) {
+        // An empty result set answers 404 on several list endpoints.
+        if (err instanceof DolibarrApiError && err.status === 404 && page > 0) break;
+        throw err;
+      }
+      if (!Array.isArray(batch) || batch.length === 0) break;
+
+      rows.push(...batch);
+      reportProgress(rows.length, page);
+
+      if (rows.length >= maxRecords) {
+        truncated = rows.length > maxRecords || batch.length === AUTO_PAGE_SIZE;
+        rows.length = Math.min(rows.length, maxRecords);
+        break;
+      }
+      // A short page is the last page.
+      if (batch.length < AUTO_PAGE_SIZE) break;
+      page += 1;
+    }
+
+    finishProgress(rows.length, truncated);
+    return rows;
   }
 
   /**

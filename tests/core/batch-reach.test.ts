@@ -12,6 +12,7 @@ import {
 } from "../../src/core/batch.js";
 import { specForPath, statusFlag } from "../../src/core/statuses.js";
 import { enableListFilters, filterSpecForPath } from "../../src/core/list-filters.js";
+import { enableAutoPaginate, isPaginatedList } from "../../src/core/paginate.js";
 
 /**
  * Reach test for the 0.5.x line: rather than spot-checking one group, rebuild the
@@ -48,6 +49,7 @@ let leaves: { path: string; cmd: Command }[];
 /** Snapshot taken *before* wiring — status-scoped wiring makes <id> optional. */
 let batchableBefore: string[];
 let filterWired: string[];
+let pageWired: string[];
 
 // Vite needs a statically analysable glob; the cli.ts parse above still decides
 // which of these actually get registered.
@@ -69,6 +71,7 @@ beforeAll(async () => {
   wired = enableBatchIds(program);
   // Same order as cli.ts, so the reach assertions see the real shipped surface.
   filterWired = enableListFilters(program);
+  pageWired = enableAutoPaginate(program);
 });
 
 describe("batch reach across every registered command group", () => {
@@ -261,6 +264,57 @@ describe("list-filter reach (v0.5.2)", () => {
       const cmd = leaves.find((l) => l.path === p)!.cmd;
       const longs = cmd.options.map((o) => o.long).filter(Boolean);
       expect(new Set(longs).size, `${p} has duplicate flags`).toBe(longs.length);
+    }
+  });
+});
+
+describe("auto-paginate reach (v0.5.3)", () => {
+  it("reaches every paginated list in the CLI", () => {
+    const expected = leaves.filter((l) => isPaginatedList(l.cmd)).map((l) => l.path).sort();
+    expect(pageWired.sort()).toEqual(expected);
+    expect(pageWired.length).toBeGreaterThan(30);
+    expect(new Set(pageWired.map((p) => p.split(" ")[0])).size).toBeGreaterThanOrEqual(25);
+  });
+
+  it("gives every wired list --all and --max-records", () => {
+    for (const p of pageWired) {
+      const cmd = leaves.find((l) => l.path === p)!.cmd;
+      const longs = cmd.options.map((o) => o.long);
+      expect(longs, `${p} missing --all`).toContain("--all");
+      expect(longs, `${p} missing --max-records`).toContain("--max-records");
+    }
+  });
+
+  it("never puts --all on a non-list command", () => {
+    for (const { path: p, cmd } of leaves) {
+      if (pageWired.includes(p)) continue;
+      expect(cmd.options.map((o) => o.long), `${p}`).not.toContain("--all");
+    }
+  });
+
+  it("does not collide with the v0.5.1 --all-<status> selectors", () => {
+    // `--all` and `--all-draft` are distinct options; a status-scoped mutation
+    // is not a list, so it never gains a bare --all.
+    const validate = leaves.find((l) => l.path === "invoices validate")!.cmd;
+    const longs = validate.options.map((o) => o.long);
+    expect(longs).toContain("--all-draft");
+    expect(longs).not.toContain("--all");
+  });
+
+  it("registers no duplicate option on any paginate-wired command", () => {
+    for (const p of pageWired) {
+      const cmd = leaves.find((l) => l.path === p)!.cmd;
+      const longs = cmd.options.map((o) => o.long).filter(Boolean);
+      expect(new Set(longs).size, `${p} has duplicate flags`).toBe(longs.length);
+    }
+  });
+
+  it("keeps --limit and --page working alongside --all", () => {
+    for (const p of pageWired) {
+      const cmd = leaves.find((l) => l.path === p)!.cmd;
+      const longs = cmd.options.map((o) => o.long);
+      expect(longs, `${p}`).toContain("--limit");
+      expect(longs, `${p}`).toContain("--page");
     }
   });
 });

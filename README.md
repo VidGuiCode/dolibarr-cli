@@ -459,6 +459,29 @@ The flags appear **only on resources that actually have the column** — `contac
 > Where a command already owns one of these flag names, the filter of that kind is not added
 > rather than shadowing it.
 
+### Fetching every page with `--all`
+
+Dolibarr pages its list endpoints. `--all` walks every page for you:
+
+```bash
+# full export, no manual pagination
+dolibarr thirdparties list --all --output csv > thirdparties.csv
+
+# combine with server-side filters
+dolibarr invoices list --all --from 2026-01-01 --to 2026-12-31 --fields id,ref,total_ttc
+```
+
+| Flag | Meaning |
+|---|---|
+| `--all` | Fetch every page, **ignoring `--limit`** |
+| `--max-records <n>` | Safety cap on records fetched (default `5000`) |
+
+- `--limit` and `--page` keep working exactly as before when `--all` is absent.
+- **Hitting the cap is never silent** — the run says so explicitly and tells you how to
+  continue. Raise `--max-records`, or narrow with `--filter` / `--from` / `--to`.
+- **Progress and warnings go to stderr**, so `--all` output stays a clean data stream:
+  `dolibarr thirdparties list --all --output csv > out.csv` writes only CSV to the file.
+
 ## Exit Codes
 
 | Code | Meaning |

@@ -43,6 +43,7 @@ import {
 } from "./core/update-notifier.js";
 import { enableBatchIds } from "./core/batch.js";
 import { enableListFilters } from "./core/list-filters.js";
+import { enableAutoPaginate } from "./core/paginate.js";
 
 const require = createRequire(import.meta.url);
 const pkg = require("../package.json") as { version: string };
@@ -112,6 +113,9 @@ enableBatchIds(program);
 // Wrapped after the batch layer so it runs first and the composed --filter is
 // already in place when a list query or a status selection reads it.
 enableListFilters(program);
+
+// Outermost: --all must be active before the list query is issued.
+enableAutoPaginate(program);
 
 configureHelp(program);
 

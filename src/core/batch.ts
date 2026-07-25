@@ -11,6 +11,7 @@ import {
 import { isDryRunEnabled, isNonInteractiveMode } from "./runtime.js";
 import { ask } from "./prompt.js";
 import { createClient } from "./config-store.js";
+import { walkLeaves } from "./command-tree.js";
 import {
   buildStatusFilter,
   specForPath,
@@ -437,16 +438,7 @@ export function isBatchable(sub: Command): boolean {
   return args.filter((a) => a.required).length === 1;
 }
 
-/** Every leaf subcommand of `root`, paired with its full space-joined path. */
-export function walkLeaves(root: Command, prefix = ""): { path: string; cmd: Command }[] {
-  const out: { path: string; cmd: Command }[] = [];
-  for (const sub of root.commands) {
-    const full = `${prefix} ${sub.name()}`.trim();
-    if (sub.commands.length > 0) out.push(...walkLeaves(sub, full));
-    else out.push({ path: full, cmd: sub });
-  }
-  return out;
-}
+export { walkLeaves } from "./command-tree.js";
 
 /**
  * Wire comma-separated batch ids into every batchable subcommand of `program`.

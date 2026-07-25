@@ -1,5 +1,68 @@
 # Changelog
 
+## 0.5.3 - 2026-07-25
+
+Fourth release of the **0.5.x line**. **`--all` auto-pagination** on every paginated `list`.
+
+```bash
+dolibarr thirdparties list --all --output csv > thirdparties.csv
+dolibarr invoices list --all --from 2026-01-01 --to 2026-12-31 --fields id,ref,total_ttc
+```
+
+### Added
+
+- **`src/core/paginate.ts`** — the `--all` state, cap parsing, progress reporting and
+  wiring. Exports `enableAutoPaginate`, `isPaginatedList`, `isPaginatedQuery`,
+  `parseMaxRecords`, `AUTO_PAGE_SIZE` and `DEFAULT_MAX_RECORDS`.
+- **`--all`** on every paginated list command — **37 commands across 28 groups** — wired from
+  one call in `src/cli.ts`.
+- **`--max-records <n>`** safety cap, default **5000**.
+- **`src/core/command-tree.ts`** — `walkLeaves` extracted into a dependency-free module so
+  the pagination hook cannot create an import cycle back through `batch.ts`. `batch.ts`
+  re-exports it, so nothing else changed.
+
+### How it reaches all 33 groups
+
+The page loop lives in `DolibarrApiClient.get`, the one place every list command already
+funnels through, and triggers only when `--all` is active **and** the query carries the
+`limit` + `page` pair that `buildListQuery` emits. Detail fetches, sub-resource listings and
+every non-list call are therefore untouched by construction.
+
+### Behaviour notes
+
+- **`--limit` and `--page` are unchanged** when `--all` is absent — one request, exactly as
+  before. `--all` deliberately bypasses `--limit` and walks in pages of 100.
+- **The cap is never silent.** Hitting it prints an explicit message naming the cap and how
+  to continue, including when the cap lands exactly on a page boundary.
+- **Progress and warnings go to stderr**, never stdout, so `list --all --output csv > f`
+  stays a clean data stream. Progress is only drawn when stderr is a TTY.
+- A short page ends the walk; a `404` on a later page is treated as the end of the list,
+  while a `404` on the first page or any permission error propagates rather than silently
+  returning a partial list.
+- Auto-pagination state is reset after every run, including when the action throws, so it
+  can never leak into a later command.
+- Commands with `--limit` but no `--page` (`categories objects`) are **excluded** — they
+  never emit a `page` param, so `--all` there would be a flag that silently did nothing.
+
+### Tests
+
+598 tests (up from 566). **All 420 pre-existing tests still pass unchanged.** Added the
+pagination suite (multi-page concatenation asserting the exact per-request `limit`/`page`,
+order and no duplicates/gaps, exact-multiple-of-page-size termination, empty first page, cap
+truncation including on a page boundary, no false cap warning when data simply runs out,
+404-as-end vs 404-as-error, permission errors propagating, and state reset on throw) plus
+reach tests that `--all` lands on every paginated list, on nothing else, and never collides
+with v0.5.1's `--all-<status>` selectors.
+
+### Verified live
+
+The real page loop was driven against a real 245-row endpoint on Dolibarr 20.0.4: **245 rows
+returned across 3 requests**, identical to a single large request in both contents and order,
+with no duplicates; `--max-records` truncating correctly at 120 and at an exact page boundary
+of 100, announcing in both cases. Also verified through the installed CLI that `--all`
+returns the full set, `--limit` is unaffected without `--all`, and the cap warning goes to
+stderr while stdout stays clean CSV.
+
 ## 0.5.2 - 2026-07-25
 
 Third release of the **0.5.x line**. **Server-side list filters**: narrow by date and amount
