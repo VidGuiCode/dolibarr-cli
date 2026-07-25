@@ -325,9 +325,17 @@ dolibarr orders delete 5,6,7 --confirm
 A single id behaves exactly as it always has — the batch path is only taken when the
 argument contains a comma.
 
-> **PowerShell users:** quote the list — `dolibarr invoices validate "12,13,14" --confirm`.
-> PowerShell parses a bare `12,13,14` as an array literal and splits it into separate
-> arguments before the CLI ever sees it. Bash, zsh and fish need no quoting.
+> **PowerShell users: quote every comma-separated value.** PowerShell parses a bare
+> `12,13,14` as an array literal and rewrites it before the CLI ever sees it, so
+> `--fields id,ref` silently becomes a single field named `id ref` and a batch id list
+> collapses into one argument. Always quote:
+>
+> ```powershell
+> dolibarr invoices validate "12,13,14" --confirm
+> dolibarr invoices list --fields "id,ref"
+> ```
+>
+> Bash, zsh and fish need no quoting.
 
 Batch runs are deliberately loud:
 
