@@ -41,6 +41,7 @@ import {
   maybePrintBanner,
   scheduleBackgroundCheckIfStale,
 } from "./core/update-notifier.js";
+import { enableBatchIds } from "./core/batch.js";
 
 const require = createRequire(import.meta.url);
 const pkg = require("../package.json") as { version: string };
@@ -102,6 +103,10 @@ program.addCommand(createMulticurrenciesCommand());
 program.addCommand(createKnowledgeCommand());
 program.addCommand(createMrpCommand());
 program.addCommand(createUpgradeCommand());
+
+// One edit, all 33 groups: wire comma-separated batch ids into every mutating
+// subcommand whose sole required positional is <id>.
+enableBatchIds(program);
 
 configureHelp(program);
 

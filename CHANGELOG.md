@@ -1,5 +1,74 @@
 # Changelog
 
+## 0.5.0 - 2026-07-25
+
+First release of the **0.5.x line — bulk, batch & scripting power**. Unlike 0.3.x and 0.4.x,
+this line adds no command group: it adds cross-cutting capability implemented once in
+`src/core/` and inherited by all **33 existing groups**.
+
+**Batch by ids.** Every mutating subcommand whose sole required positional is a record id now
+accepts a comma-separated list — **90 subcommands across 26 groups**, wired from a single
+call in `src/cli.ts`.
+
+```bash
+dolibarr invoices validate 12,13,14 --confirm
+dolibarr thirdparties update 20,21 --town "Berlin" --confirm
+dolibarr orders delete 5,6,7 --confirm --output json
+```
+
+### Added
+
+- **`src/core/batch.ts`** — id-list parsing, per-item execution, and result aggregation.
+  Exports `parseIdList`, `batchExitCode`, `unpackItemError`, `isBatchable`, `walkLeaves` and
+  `enableBatchIds` as pure, directly-testable functions.
+- **Comma-separated id lists** on every batchable mutating subcommand (`delete`, `update`,
+  `validate`, `close`, `pay`, `add-line`, `add`, `create`, `set-status`, `set-draft`,
+  `set-rate`, `unpay`, `reopen`, `approve`, `make-order`, `receive`).
+- **`--confirm`** added to the batchable subcommands that lacked it. A batch refuses to run
+  non-interactively without it, and states how many records will be affected when prompting.
+- **Exit code `5` = partial batch failure** — some items applied, some failed. Documented in
+  the new README exit-code table. A batch where *every* item failed keeps the shared
+  underlying code (2/3/4/1) instead.
+- **Machine-readable batch envelope** under `--output json` / `--json`: `total`, `succeeded`,
+  `failed`, `exitCode` and a per-item `results` array carrying `error` plus a structured
+  `detail` object. A half-applied batch is now detectable by an agent — the motivating gap
+  for this whole line.
+- **`--dry-run` on a batch prints every resolved target id** and the request each would send,
+  never a count or a sample.
+- README: new **Batch operations** and **Exit Codes** sections.
+
+### Behaviour notes
+
+- **A single id is untouched.** The batch path is entered only when the positional contains a
+  comma; `invoices validate 12` takes the original code path and produces byte-identical
+  output and exit codes. A one-element list (`12,`) also collapses to the single-id path.
+- **Failures never abort the run.** Items execute sequentially — no concurrent writes against
+  a live ERP — and each is reported ok/failed with a reason.
+- **Malformed lists are rejected before anything is touched** (non-numeric, negative or
+  decimal ids), exiting `3`.
+- **Read commands are not batched.** `get`, `list`, `lines`, `payments` and friends keep their
+  exact output shape. `src/core/batch.ts` carries explicit `BATCH_VERBS` /
+  `READ_ONLY_ID_VERBS` tables, and a test fails if any id-taking subcommand is unclassified.
+- Multi-positional mutations (`thirdparties merge <id> <id-to-delete>`,
+  `categories link <id> <type> <object-id>`) are deliberately **not** batched — the semantics
+  of a list in the first slot are ambiguous there.
+
+### Tests
+
+459 tests (up from 420). **All 420 pre-existing tests pass unchanged** — they are the
+compatibility contract for this line. Added unit tests for the batch engine (empty list,
+duplicates, non-numeric, one-item-equals-single-id, partial failure → exit 5, dry-run target
+listing, an item calling `process.exit` itself) plus **reach tests** that rebuild the whole
+command tree from `src/cli.ts` and assert the capability landed on every group rather than
+spot-checking one.
+
+### Verified live
+
+Exercised end-to-end against Dolibarr 20.0.4 using throwaway `CLIBULK-` thirdparty fixtures:
+batch `update` across 3 records (persisted and confirmed), a deliberate partial failure
+returning **exit 5** with per-item detail, and batch `delete` for cleanup. All fixtures were
+removed and the resource verified back to its prior contents.
+
 ## 0.4.7 - 2026-07-25
 
 New resource groups — line 0.4.x, part 8 (final): **`mrp`** (BOMs + manufacturing orders +

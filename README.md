@@ -311,6 +311,80 @@ dolibarr thirdparties create --name "Test" --supplier --dry-run
 # No changes made.
 ```
 
+## Batch operations
+
+Every mutating subcommand that takes a record id as its only positional argument also
+accepts a **comma-separated id list**, so one call can act on many records:
+
+```bash
+dolibarr invoices validate 12,13,14 --confirm
+dolibarr thirdparties update 20,21 --town "Berlin" --confirm
+dolibarr orders delete 5,6,7 --confirm
+```
+
+A single id behaves exactly as it always has — the batch path is only taken when the
+argument contains a comma.
+
+Batch runs are deliberately loud:
+
+- **`--dry-run` prints every resolved target** and the request each one would send — not a
+  count, not a sample.
+- **Confirmation is required.** Non-interactively, a batch refuses to run without
+  `--confirm` and exits `3`.
+- **Failures do not stop the batch.** Each item is attempted in turn and reported
+  individually, so a half-applied batch is always detectable.
+- **Partial success exits `5`** (see the exit-code table below).
+
+Under `--output json` the whole run collapses to a single machine-readable envelope:
+
+```bash
+dolibarr invoices validate 12,13,14 --confirm --output json
+```
+
+```json
+{
+  "batch": true,
+  "action": "invoices validate",
+  "dryRun": false,
+  "total": 3,
+  "succeeded": 2,
+  "failed": 1,
+  "exitCode": 5,
+  "results": [
+    { "id": "12", "ok": true },
+    { "id": "13", "ok": true },
+    {
+      "id": "14",
+      "ok": false,
+      "exitCode": 1,
+      "error": "API error 404: Not Found: Invoice not found",
+      "detail": { "httpStatus": 404, "method": "POST", "path": "invoices/14/validate" }
+    }
+  ]
+}
+```
+
+Re-running a batch with the failed ids converges rather than double-applying, so the usual
+recovery is to fix the cause and re-run just the ids that reported `"ok": false`.
+
+Ids must be positive integers in a list; a malformed list is rejected before **any** record
+is touched. Read commands (`get`, `list`, …) are not batched — their output shape is
+unchanged.
+
+## Exit Codes
+
+| Code | Meaning |
+|---|---|
+| `0` | Success |
+| `1` | Generic error (including a batch where every item failed for an unclassified reason) |
+| `2` | Authentication or permission failure (HTTP 401 / 403) |
+| `3` | Validation error, or a prompt was required in non-interactive mode |
+| `4` | Rate limited (HTTP 429) |
+| `5` | **Partial batch failure** — some items applied, some failed |
+
+Code `5` only ever comes from a batch run. When every item of a batch fails, the batch exits
+with that shared underlying code (e.g. `2` for a permission-gated module) rather than `5`.
+
 ## Commands
 
 | Command | Description |
