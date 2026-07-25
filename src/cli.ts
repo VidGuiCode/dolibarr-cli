@@ -42,6 +42,7 @@ import {
   scheduleBackgroundCheckIfStale,
 } from "./core/update-notifier.js";
 import { enableBatchIds } from "./core/batch.js";
+import { enableListFilters } from "./core/list-filters.js";
 
 const require = createRequire(import.meta.url);
 const pkg = require("../package.json") as { version: string };
@@ -107,6 +108,10 @@ program.addCommand(createUpgradeCommand());
 // One edit, all 33 groups: wire comma-separated batch ids into every mutating
 // subcommand whose sole required positional is <id>.
 enableBatchIds(program);
+
+// Wrapped after the batch layer so it runs first and the composed --filter is
+// already in place when a list query or a status selection reads it.
+enableListFilters(program);
 
 configureHelp(program);
 

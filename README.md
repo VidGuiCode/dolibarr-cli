@@ -422,6 +422,43 @@ Selection rules:
 > string tokens (`draft`, `paid`) and **silently ignores** a numeric value — the status-scoped
 > flags avoid that trap entirely.
 
+## Server-side list filters
+
+`list` commands can narrow by date and amount **at the server**, so scripts and agents stop
+pulling everything and filtering locally:
+
+```bash
+dolibarr invoices list --from 2026-01-01 --to 2026-12-31
+dolibarr invoices list --min-amount 1000 --max-amount 5000
+dolibarr orders list --from 2026-03-01 --to 2026-03-31 --fields id,ref,total_ttc
+```
+
+| Flag | Meaning |
+|---|---|
+| `--from <YYYY-MM-DD>` | Records on or after this date |
+| `--to <YYYY-MM-DD>` | Records on or before this date (**the whole day is included**) |
+| `--min-amount <n>` | Amount at or above `n` |
+| `--max-amount <n>` | Amount at or below `n` |
+
+These compile to Dolibarr `sqlfilters` and are **ANDed with** any `--filter` you pass, so the
+two compose rather than one overriding the other. They also apply to v0.5.1's status-scoped
+selection, which is what makes this work:
+
+```bash
+# validate just this month's drafts — preview first
+dolibarr invoices validate --all-draft --from 2026-03-01 --to 2026-03-31 --dry-run
+dolibarr invoices validate --all-draft --from 2026-03-01 --to 2026-03-31 --confirm
+```
+
+The flags appear **only on resources that actually have the column** — `contacts list` has
+`--from`/`--to` but no `--min-amount`, because contacts have no amount. Dates must be exact
+`YYYY-MM-DD` calendar dates, and an inverted range is rejected before any request is sent
+(exit `3`).
+
+> `bank transfer` keeps its own pre-existing `--from`/`--to` (source and destination account).
+> Where a command already owns one of these flag names, the filter of that kind is not added
+> rather than shadowing it.
+
 ## Exit Codes
 
 | Code | Meaning |

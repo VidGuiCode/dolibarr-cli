@@ -1,3 +1,4 @@
+import { combineFilters } from "../core/list-filters.js";
 import * as fs from "node:fs";
 import { Command } from "commander";
 import { createClient } from "../core/config-store.js";
@@ -147,7 +148,12 @@ export function createTasksCommand(): Command {
     )
     .action(async (opts) => {
       try {
-        const filter = opts.project ? `(t.fk_projet:=:${Number(opts.project)})` : opts.filter;
+        // Compose rather than replace: --filter (and the date filters folded
+        // into it) must survive alongside --project.
+        const filter = combineFilters(
+          opts.project ? `(t.fk_projet:=:${Number(opts.project)})` : undefined,
+          opts.filter,
+        );
         const client = createClient();
         const items = await client.get<Record<string, unknown>[]>(
           "tasks",

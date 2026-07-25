@@ -11,6 +11,7 @@ import {
   walkLeaves,
 } from "../../src/core/batch.js";
 import { specForPath, statusFlag } from "../../src/core/statuses.js";
+import { enableListFilters, filterSpecForPath } from "../../src/core/list-filters.js";
 
 /**
  * Reach test for the 0.5.x line: rather than spot-checking one group, rebuild the
@@ -46,6 +47,7 @@ let wired: string[];
 let leaves: { path: string; cmd: Command }[];
 /** Snapshot taken *before* wiring — status-scoped wiring makes <id> optional. */
 let batchableBefore: string[];
+let filterWired: string[];
 
 // Vite needs a statically analysable glob; the cli.ts parse above still decides
 // which of these actually get registered.
@@ -65,6 +67,8 @@ beforeAll(async () => {
   leaves = walkLeaves(program);
   batchableBefore = leaves.filter((l) => isBatchable(l.cmd)).map((l) => l.path).sort();
   wired = enableBatchIds(program);
+  // Same order as cli.ts, so the reach assertions see the real shipped surface.
+  filterWired = enableListFilters(program);
 });
 
 describe("batch reach across every registered command group", () => {
@@ -176,6 +180,88 @@ describe("status-scoped reach (v0.5.1)", () => {
     const addLine = leaves.find((l) => l.path === "invoices add-line")!.cmd;
     expect(addLine.options.some((o) => o.long?.startsWith("--all-"))).toBe(false);
     expect(addLine.registeredArguments[0].required).toBe(true);
+  });
+});
+
+describe("list-filter reach (v0.5.2)", () => {
+  it("reaches many list commands across many groups", () => {
+    expect(filterWired.length).toBeGreaterThan(20);
+    expect(new Set(filterWired.map((p) => p.split(" ")[0])).size).toBeGreaterThanOrEqual(12);
+  });
+
+  it("adds --from/--to exactly where the resource has a date column", () => {
+    for (const p of filterWired) {
+      const cmd = leaves.find((l) => l.path === p)!.cmd;
+      const spec = filterSpecForPath(p)!;
+      const longs = cmd.options.map((o) => o.long);
+      if (spec.dateColumn) {
+        expect(longs, `${p} missing --from`).toContain("--from");
+        expect(longs, `${p} missing --to`).toContain("--to");
+      } else {
+        expect(longs, `${p} should not offer --from`).not.toContain("--from");
+      }
+    }
+  });
+
+  it("adds --min-amount/--max-amount exactly where the resource has an amount column", () => {
+    for (const p of filterWired) {
+      const cmd = leaves.find((l) => l.path === p)!.cmd;
+      const spec = filterSpecForPath(p)!;
+      const longs = cmd.options.map((o) => o.long);
+      if (spec.amountColumn) {
+        expect(longs, `${p} missing --min-amount`).toContain("--min-amount");
+        expect(longs, `${p} missing --max-amount`).toContain("--max-amount");
+      } else {
+        expect(longs, `${p} should not offer --min-amount`).not.toContain("--min-amount");
+      }
+    }
+  });
+
+  it("never offers a date/amount flag on a resource with no such column", () => {
+    const wiredSet = new Set(filterWired);
+    for (const { path: p, cmd } of leaves) {
+      if (!wiredSet.has(p)) continue;
+      const spec = filterSpecForPath(p);
+      const longs = cmd.options.map((o) => o.long);
+      if (!spec?.dateColumn) expect(longs, `${p}`).not.toContain("--from");
+      if (!spec?.amountColumn) expect(longs, `${p}`).not.toContain("--min-amount");
+    }
+  });
+
+  it("does not shadow a pre-existing --from/--to that means something else", () => {
+    // `bank transfer --from <account> --to <account>` predates v0.5.2 and must
+    // keep its own meaning; reinterpreting an account id as a date would be a
+    // silent, damaging misread.
+    const transfer = leaves.find((l) => l.path === "bank transfer");
+    expect(transfer).toBeDefined();
+    expect(filterWired).not.toContain("bank transfer");
+    const from = transfer!.cmd.options.find((o) => o.long === "--from")!;
+    expect(from.description).not.toMatch(/YYYY-MM-DD/);
+  });
+
+  it("leaves sub-resource listings (no --filter) untouched", () => {
+    const sub = leaves.find((l) => l.path === "thirdparties representatives list");
+    expect(sub).toBeDefined();
+    const longs = sub!.cmd.options.map((o) => o.long);
+    expect(longs).not.toContain("--from");
+    expect(longs).not.toContain("--min-amount");
+  });
+
+  it("reaches the v0.5.1 status-scoped mutations too, so selections can be dated", () => {
+    // This is what makes `invoices validate --all-draft --from ... --to ...` work.
+    const validate = leaves.find((l) => l.path === "invoices validate")!.cmd;
+    const longs = validate.options.map((o) => o.long);
+    expect(longs).toContain("--from");
+    expect(longs).toContain("--to");
+    expect(filterWired).toContain("invoices validate");
+  });
+
+  it("registers no duplicate option on any filter-wired command", () => {
+    for (const p of filterWired) {
+      const cmd = leaves.find((l) => l.path === p)!.cmd;
+      const longs = cmd.options.map((o) => o.long).filter(Boolean);
+      expect(new Set(longs).size, `${p} has duplicate flags`).toBe(longs.length);
+    }
   });
 });
 

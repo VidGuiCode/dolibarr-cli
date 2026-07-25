@@ -1,3 +1,4 @@
+import { combineFilters } from "../core/list-filters.js";
 import * as fs from "node:fs";
 import { Command } from "commander";
 import { createClient } from "../core/config-store.js";
@@ -249,7 +250,9 @@ function createProductStockMovementsCommand(): Command {
     .addHelpText("after", "\nSee also: `dolibarr stock movements list` (warehouse-first view).")
     .action(async (opts) => {
       try {
-        const sqlfilters = buildStockMovementFilter(opts) ?? opts.filter;
+        // Compose rather than replace, so --filter is not silently dropped when
+        // --product/--warehouse are also given.
+        const sqlfilters = combineFilters(buildStockMovementFilter(opts), opts.filter);
         const client = createClient();
         const items = await client.get<Record<string, unknown>[]>(
           "stockmovements",

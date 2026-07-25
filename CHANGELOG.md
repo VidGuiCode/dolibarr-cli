@@ -1,5 +1,80 @@
 # Changelog
 
+## 0.5.2 - 2026-07-25
+
+Third release of the **0.5.x line**. **Server-side list filters**: narrow by date and amount
+at the source instead of pulling everything and filtering locally.
+
+```bash
+dolibarr invoices list --from 2026-01-01 --to 2026-12-31
+dolibarr invoices list --min-amount 1000 --max-amount 5000
+dolibarr invoices validate --all-draft --from 2026-03-01 --to 2026-03-31 --dry-run
+```
+
+### Added
+
+- **`src/core/list-filters.ts`** — compiles `--from` / `--to` / `--min-amount` /
+  `--max-amount` into Dolibarr `sqlfilters`. Exports `buildListFilters`, `combineFilters`,
+  `parseFilterDate`, `parseFilterAmount`, `nextDay`, `filterSpecForPath`,
+  `availableDimensions` and `RESOURCE_FILTERS`.
+- **`--from` / `--to`** on every filterable command of a resource with a known date column,
+  and **`--min-amount` / `--max-amount`** where there is an amount column — wired from one
+  call in `src/cli.ts`, reaching **both** `list` commands and the v0.5.1 status-scoped
+  mutations, which is what makes `validate --all-draft --from … --to …` work.
+- The compiled predicate is **ANDed into** the command's own `--filter`, so the two compose.
+
+### Per-resource columns, probed not guessed
+
+Both the date column and the amount column vary. Each candidate was probed with a real
+`sqlfilters` query against Dolibarr 20.0.4 and kept only if it did not 503 — **12 resources
+verified**: `datef` (invoices, supplier-invoices), `date_commande` (orders, supplier-orders),
+`datep` (proposals), `dateo` (projects, tasks), `date_contrat` (contracts), `date_debut`
+(expensereports), `datec` (thirdparties, contacts, users); amounts on `total_ttc`, plus
+`opp_amount` for projects.
+
+Resources with no date or amount column simply do not get the flag — `contacts list` has
+`--from`/`--to` but no `--min-amount`.
+
+### `--to` is inclusive of the whole day
+
+`--to 2026-03-31` compiles to `< 2026-04-01`, not `<= 2026-03-31`. On a DATETIME column the
+latter would mean midnight and silently drop that day's records. It also keeps a `:` out of
+the sqlfilters value, which is delimiter-sensitive.
+
+### Behaviour notes
+
+- **No flag is shadowed.** `bank transfer` already owns `--from`/`--to` (source/destination
+  account). Where a command already uses one of these names, that filter dimension is
+  dropped for it rather than redefined — and its value is never read as a date. Covered by a
+  test.
+- Dates must be exact `YYYY-MM-DD` calendar dates; `2024-02-30` is rejected. Inverted ranges
+  (`--to` before `--from`, `--max-amount` below `--min-amount`) are rejected **before any
+  request is sent**, exit `3`.
+- **Fixed a pre-existing silent override:** `stock movements`, `products stock-movements` and
+  `tasks list` discarded `--filter` entirely when `--product` / `--warehouse` / `--project`
+  was also given. They now compose via `combineFilters`. This makes `--filter` work where it
+  previously did nothing; no test depended on the old behaviour.
+
+### Tests
+
+566 tests (up from 516). **All 420 pre-existing tests still pass unchanged.** Added the
+filter-compiler suite (calendar validation including leap years, next-day rollover across
+month/year boundaries, range inversion, missing-column refusal) and reach tests asserting the
+flags land exactly where the column exists, never on sub-resource listings, never duplicated,
+and never shadowing `bank transfer`.
+
+### Verified live
+
+Exercised read-only against Dolibarr 20.0.4: an in-range query returning rows, a single-day
+`--from`/`--to` proving whole-day inclusivity, an out-of-range query returning none,
+composition with an explicit `--filter`, rejection of a malformed and an inverted range, and
+the roadmap's exit-criterion one-liner
+`invoices validate --all-draft --from … --to … --dry-run` resolving its selection correctly.
+
+> ⚠️ Columns for the 8 permission-gated resources (`tickets`, `interventions`, `members`,
+> `products`, `shipments`, `receptions`, `agenda`, `supplier-proposals`) follow Dolibarr's
+> table conventions and are **not** live-verified. A wrong column fails loudly with a 503.
+
 ## 0.5.1 - 2026-07-25
 
 Second release of the **0.5.x line**. **Status-scoped bulk**: select records by status, then
