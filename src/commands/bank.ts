@@ -270,7 +270,7 @@ export function createBankCommand(): Command {
           date: parseBankTransferDate(opts.date),
           description: opts.description,
         };
-        if (dryRunJson("bank.transfer", { body })) return;
+        if (dryRunJson("bank.transfer", { body }, { method: "POST", path: "bankaccounts/transfer", body })) return;
         const client = createClient();
         const result = await client.post<unknown>("bankaccounts/transfer", body);
         if (opts.json) { printJson(result); return; }
@@ -293,7 +293,14 @@ export function createBankCommand(): Command {
     .action(async (accountId, opts) => {
       try {
         const body = buildBankTransactionBody(opts);
-        if (dryRunJson("bank.addTransaction", { accountId, body })) return;
+        if (
+          dryRunJson("bank.addTransaction", { accountId, body }, {
+            method: "POST",
+            path: `bankaccounts/${accountId}/lines`,
+            body,
+          })
+        )
+          return;
         const client = createClient();
         const result = await client.post<unknown>(`bankaccounts/${accountId}/lines`, body);
         if (opts.json) { printJson(result); return; }

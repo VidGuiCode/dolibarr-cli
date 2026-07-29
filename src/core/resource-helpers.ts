@@ -295,15 +295,37 @@ export async function echoState(
 }
 
 /**
+ * The resolved HTTP request a dry run would have sent (v0.6.8).
+ *
+ * Optional: supplied by the commands where knowing the exact endpoint matters most —
+ * the money movers — rather than retrofitted onto all 292 leaves.
+ */
+export interface DryRunRequest {
+  method: "POST" | "PUT" | "DELETE";
+  path: string;
+  body?: unknown;
+}
+
+/**
  * If `--dry-run` was passed, emit a normalized dry-run JSON envelope and return true.
  * Otherwise return false so the caller can continue.
+ *
+ * Passing `request` adds a `request` key showing the resolved method, path and body.
  */
 export function dryRunJson(
   action: string,
   payload: Record<string, unknown>,
+  request?: DryRunRequest,
 ): boolean {
   if (!isDryRunEnabled()) return false;
-  printJson({ dryRun: true, action, ...payload });
+  // `request` is only added when a caller supplies it, so the pre-0.6.8 envelope shape
+  // is unchanged for every command that has not been given a request descriptor.
+  printJson({
+    dryRun: true,
+    action,
+    ...payload,
+    ...(request ? { request: { method: request.method, path: request.path, body: request.body ?? null } } : {}),
+  });
   return true;
 }
 

@@ -1,5 +1,62 @@
 # Changelog
 
+## 0.6.8 - 2026-07-29
+
+Closes the 0.6.x line. **`--explain`** — say what an invocation would do, including which
+safety gates apply, and stop.
+
+```bash
+dolibarr bank transfer --from 1 --to 2 --amount 500 --date 2026-07-29 --description Rent --explain
+```
+
+```text
+Command:        dolibarr bank transfer
+Does:           Transfer between bank accounts
+Classification: money
+Effect:         Move or record money. This cannot be undone from the CLI
+Options:
+  --from 1
+  --to 2
+  --amount 500
+Gates:
+  - Duplicate check: an identical movement already performed by this CLI would be refused.
+  - Approval: you will be prompted to type "yes" before anything is sent.
+
+Nothing was executed. Re-run without --explain to perform it.
+```
+
+### Added
+
+- **`--explain` on every command.** `--dry-run` answers "what body would be sent?";
+  `--explain` answers the question a user actually has before running something
+  unfamiliar — *what is about to happen to me*: which record, which gates apply, whether
+  it will prompt, whether it can write at all in the current mode. Supports `--json`.
+- **Richer `--dry-run`:** money commands (`bank transfer`, `bank add-transaction`,
+  `invoices pay`) now include a `request` block showing the **resolved method, path and
+  body** — the report's "request preview" ask.
+
+### Design notes
+
+- **Everything `--explain` reports is derived centrally** from the wiring layers, so no
+  command file describes itself and none can drift out of sync with its own explanation.
+  Classification comes from the same verb-based table that gates writes, so the
+  explanation cannot disagree with the enforcement.
+- **Gates are listed in the order they actually fire.** Read-only leads, because it stops
+  a write before anything asks for approval — an explanation that implied you would be
+  prompted first would be misleading.
+- **Reflects the real runtime mode**, not a generic description: `--read-only`,
+  `--confirm`, `DOLIBARR_ASSUME_YES`, `--approve` and `--dry-run` each change what it
+  says.
+- **Wired outermost**, so `--explain` short-circuits before every other layer and can
+  describe a financial write without triggering the confirmation prompt it is describing.
+- **The approval token is never printed**, and sensitive option values are redacted.
+- **The dry-run envelope is unchanged** for commands with no request descriptor — the
+  `request` key appears only when one is supplied, so no existing output shape moved.
+
+### Tests
+
+998 passing (701 pre-existing, all still green), build clean.
+
 ## 0.6.7 - 2026-07-29
 
 **Progress indicators** for the operations that actually take time — batch runs,
@@ -32,7 +89,8 @@ accounting exports, and document uploads.
 - A literal carriage return had ended up inside a template literal, and JavaScript
   normalizes CR inside template literals to LF — so the stop sequence would have emitted
   a newline instead of returning to column 0, leaving a stray blank line after every
-  spinner. Caught by a test asserting the redraw uses `` and never `
+  spinner. Caught by a test asserting the redraw uses `
+` and never `
 `.
 
 ### Verification

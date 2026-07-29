@@ -50,6 +50,7 @@ import { enableOutputFormats } from "./core/formats.js";
 import { enableFinancialConfirmation } from "./core/financial-writes.js";
 import { enableViews } from "./core/views.js";
 import { enablePickers } from "./core/picker.js";
+import { enableExplain } from "./core/explain.js";
 
 const require = createRequire(import.meta.url);
 const pkg = require("../package.json") as { version: string };
@@ -150,6 +151,9 @@ enableViews(program);
 
 // Outermost: an omitted id is resolved interactively before anything else reads it.
 enablePickers(program);
+
+// Truly outermost: --explain must short-circuit before any other layer acts.
+enableExplain(program);
 
 configureHelp(program);
 

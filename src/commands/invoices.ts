@@ -267,7 +267,14 @@ export function createInvoicesCommand(): Command {
         if (opts.closeNote) body.close_note = opts.closeNote;
         if (opts.bankAccount) body.accountid = Number(opts.bankAccount);
 
-        if (dryRunJson("invoices.pay", { id, body })) return;
+        if (
+          dryRunJson("invoices.pay", { id, body }, {
+            method: "POST",
+            path: `invoices/${id}/payments`,
+            body,
+          })
+        )
+          return;
         const result = await client.post<unknown>(`invoices/${id}/payments`, body);
         if (opts.json) { printJson(result); return; }
         printInfo(`Payment registered on invoice ${id}`);

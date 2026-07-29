@@ -364,6 +364,29 @@ describe("resource-helpers", () => {
       });
     });
 
+    it("adds a resolved request preview only when one is supplied (v0.6.8)", () => {
+      process.argv = ["node", "cli", "--dry-run"];
+      const logSpy = vi.spyOn(console, "log").mockImplementation(() => {});
+      dryRunJson("bank.transfer", { body: { amount: 5 } }, {
+        method: "POST",
+        path: "bankaccounts/transfer",
+        body: { amount: 5 },
+      });
+      const printed = JSON.parse(logSpy.mock.calls[0][0] as string);
+      expect(printed.request).toEqual({
+        method: "POST",
+        path: "bankaccounts/transfer",
+        body: { amount: 5 },
+      });
+    });
+
+    it("normalizes a bodyless request preview to null", () => {
+      process.argv = ["node", "cli", "--dry-run"];
+      const logSpy = vi.spyOn(console, "log").mockImplementation(() => {});
+      dryRunJson("x.delete", { id: "1" }, { method: "DELETE", path: "invoices/1" });
+      expect(JSON.parse(logSpy.mock.calls[0][0] as string).request.body).toBeNull();
+    });
+
     it("merges arbitrary payload keys (id, body, etc.)", () => {
       process.argv = ["node", "cli", "--dry-run"];
       const logSpy = vi.spyOn(console, "log").mockImplementation(() => {});

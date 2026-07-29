@@ -7,7 +7,7 @@ Unofficial CLI for [Dolibarr ERP](https://www.dolibarr.org) — full REST API co
 Requires Node.js 20+ and npm.
 
 ```bash
-npm install -g https://github.com/VidGuiCode/dolibarr-cli/releases/download/v0.6.7/dolibarr-cli-0.6.7.tgz
+npm install -g https://github.com/VidGuiCode/dolibarr-cli/releases/download/v0.6.8/dolibarr-cli-0.6.8.tgz
 dolibarr --version
 dolibarr config init
 ```
@@ -311,6 +311,26 @@ All mutating commands support `--dry-run` to preview what would happen:
 dolibarr thirdparties create --name "Test" --supplier --dry-run
 # Would create thirdparty: { name: "Test", fournisseur: 1 }
 # No changes made.
+```
+
+## Explaining a command
+
+`--dry-run` shows the body that would be sent. `--explain` answers the broader question —
+what is about to happen, and what will gate it:
+
+```bash
+dolibarr bank transfer --from 1 --to 2 --amount 500 --date 2026-07-29 --description Rent --explain
+```
+
+It reports the classification (money / state / overwrite / raw / read), the effect, the
+resolved arguments, and the gates in the order they fire — read-only first, then the
+duplicate check, then how approval will be satisfied. Nothing is executed. Supports
+`--json`.
+
+On money commands, `--dry-run` additionally shows the resolved request:
+
+```json
+"request": { "method": "POST", "path": "bankaccounts/transfer", "body": { … } }
 ```
 
 ## Progress indicators
