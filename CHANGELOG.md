@@ -1,5 +1,83 @@
 # Changelog
 
+## 0.6.3 - 2026-07-29
+
+Closes the **safety block** (0.6.0–0.6.3). Approval tokens, an audit trail, and protection
+against paying the same invoice twice.
+
+### Added — duplicate-payment protection
+
+The hazard this exists for: a payment appears to fail — timeout, dropped connection,
+ambiguous error — but actually applied server-side. Re-running it moves the money twice,
+and Dolibarr accepts the second one because from its side nothing is wrong.
+
+The CLI now keeps a local ledger of the money movements it performed, fingerprinted by what
+makes two payments *the same payment*: command, account, amount, date and reference. An
+identical repeat within 30 days is refused, overridable with **`--allow-duplicate`**.
+
+- A movement is recorded only **after** the command succeeds, so a payment that genuinely
+  failed can still be retried — blocking that would be the opposite of the intended fix.
+- Amounts are normalized, so `100`, `100.0` and `"100.00"` are the same payment. A retry
+  typed slightly differently would otherwise slip through.
+- The fingerprint uses an **exclusion** list, not a list of identifying fields, so a money
+  command added later — or a new flag on an existing one — is covered automatically rather
+  than silently falling outside the check.
+- The refusal states plainly that this only sees writes made by this CLI on this machine.
+  Overstating the guarantee would be worse than not having it.
+
+### Added — approval tokens
+
+**`--approve <token>`**, checked against `DOLIBARR_APPROVAL_TOKEN`, for unattended runs
+where `--confirm` is too easy to supply by accident: an agent can only approve a financial
+write if it was handed the secret out of band.
+
+- A missing or mismatched token is **refused**, and `--confirm` or `DOLIBARR_ASSUME_YES`
+  cannot rescue a wrong one — a bad token is always an error, never masked.
+- Compared in constant time.
+- **Never echoed** in the confirmation display or written to the audit log.
+
+### Added — audit trail
+
+**`--audit-log <path>`** / **`DOLIBARR_AUDIT_LOG`** append every **mutating** call to an
+NDJSON file: timestamp, method, endpoint, body, outcome, HTTP status.
+
+- Written at the same API-client choke point as read-only, so `raw` and future commands are
+  covered without opting in.
+- Reads are not logged — the trail answers "what did this run change?", and drowning that
+  in GETs would defeat it.
+- Records **blocked** and **failed** writes too. A write that may or may not have landed is
+  exactly what an audit trail is for.
+- Sensitive body fields are redacted **unconditionally**, whether or not `--redact` was
+  passed; the API key is never written. An audit log that leaks an IBAN is worse than none.
+- Off by default: silently writing business data to a user's disk is not something to do
+  unasked.
+
+### Batch composition
+
+The 0.5.x bulk rules and the new financial guardrails compose rather than conflict. The
+mechanism is wiring order — the financial gate sits *inside* the batch wrapper, so a batch
+confirms once for the whole selection and each item inherits that approval. Wired the other
+way round, a 20-id batch would prompt 21 times. A test now asserts that ordering directly.
+
+### Fixed
+
+- The batch layer's `--max` selection cap carried a default value and was therefore present
+  on every run, which made it participate in the payment fingerprint. Selection controls
+  are now excluded. Caught during live verification.
+
+### Verification
+
+Exercised end-to-end against Dolibarr 20.0.4 **without moving any money**. Duplicate
+protection was proved by seeding the ledger and confirming the identical payment is refused
+(exit `3`), `--allow-duplicate` overrides it, and a different amount is correctly not a
+duplicate. Approval tokens were verified across all three outcomes (no token configured,
+wrong token, correct token) and confirmed absent from output. The audit log was confirmed
+to record a real failed write with its status.
+
+### Tests
+
+888 passing (701 pre-existing, all still green), build clean.
+
 ## 0.6.2 - 2026-07-29
 
 **Named output views + sensitive-field redaction.** A single invoice carries ~130 fields,

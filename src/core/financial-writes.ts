@@ -1,3 +1,4 @@
+import { timingSafeEqual } from "node:crypto";
 import type { Command } from "commander";
 import {
   NonInteractiveError,
@@ -10,6 +11,13 @@ import { printError, printJson, printNotice } from "./output.js";
 import { ask } from "./prompt.js";
 import { isDryRunEnabled, isNonInteractiveMode, isReadOnlyMode } from "./runtime.js";
 import { walkLeaves } from "./command-tree.js";
+import {
+  duplicateError,
+  findDuplicate,
+  fingerprint,
+  readLedger,
+  recordMovement,
+} from "./idempotency.js";
 
 /**
  * Mandatory confirmation on writes that move money or change a document's legal
@@ -92,12 +100,36 @@ export interface ConfirmContext {
   nonInteractive: boolean;
   /** What the command actually does, so the refusal names the real risk. */
   effect?: string;
+  /** Value of `--approve <token>`, when given. */
+  approveToken?: string;
+  /** Value of DOLIBARR_APPROVAL_TOKEN, when configured. */
+  expectedToken?: string;
 }
 
 export type ConfirmDecision =
-  | { action: "proceed"; reason: "dry-run" | "confirm-flag" | "assume-yes" }
+  | { action: "proceed"; reason: "dry-run" | "confirm-flag" | "assume-yes" | "approve-token" }
   | { action: "prompt" }
   | { action: "refuse"; message: string };
+
+/**
+ * The approval token an unattended run must present (v0.6.3).
+ *
+ * `--approve <token>` is checked against `DOLIBARR_APPROVAL_TOKEN`. The point is that an
+ * agent or script can only approve a financial write if it has been handed the secret out
+ * of band — unlike `--confirm`, which anything that can build a command line can pass.
+ */
+export function expectedApprovalToken(env: NodeJS.ProcessEnv = process.env): string | undefined {
+  const t = (env.DOLIBARR_APPROVAL_TOKEN ?? "").trim();
+  return t === "" ? undefined : t;
+}
+
+/** Constant-time comparison, so a wrong token cannot be discovered by timing. */
+export function tokenMatches(supplied: string, expected: string): boolean {
+  const a = Buffer.from(supplied);
+  const b = Buffer.from(expected);
+  if (a.length !== b.length) return false;
+  return timingSafeEqual(a, b);
+}
 
 /**
  * The whole gate as a pure function, so every branch is testable without moving a
@@ -106,6 +138,29 @@ export type ConfirmDecision =
 export function decideConfirmation(ctx: ConfirmContext): ConfirmDecision {
   // A dry run changes nothing, so it needs no approval.
   if (ctx.dryRun) return { action: "proceed", reason: "dry-run" };
+
+  // An explicitly supplied token is checked before anything else can wave it through,
+  // so a wrong token is always an error rather than being masked by --confirm.
+  if (ctx.approveToken !== undefined) {
+    if (!ctx.expectedToken) {
+      return {
+        action: "refuse",
+        message:
+          `--approve was given but no approval token is configured.\n` +
+          `  Set DOLIBARR_APPROVAL_TOKEN to the expected value, or use --confirm instead.`,
+      };
+    }
+    if (!tokenMatches(ctx.approveToken, ctx.expectedToken)) {
+      return {
+        action: "refuse",
+        message:
+          `--approve token does not match DOLIBARR_APPROVAL_TOKEN.\n` +
+          `  Refusing \`${ctx.path}\`.`,
+      };
+    }
+    return { action: "proceed", reason: "approve-token" };
+  }
+
   if (ctx.hasConfirmFlag) return { action: "proceed", reason: "confirm-flag" };
   if (ctx.assumeYes) return { action: "proceed", reason: "assume-yes" };
   if (ctx.nonInteractive) {
@@ -121,9 +176,17 @@ export function decideConfirmation(ctx: ConfirmContext): ConfirmDecision {
   return { action: "prompt" };
 }
 
-/** Options that describe the CLI run rather than the write itself. */
+/**
+ * Options that describe the CLI run rather than the write itself, and are therefore
+ * not worth showing in the confirmation.
+ *
+ * `approve` is in here for a stronger reason than noise: it holds a SECRET. Echoing it
+ * would print the approval token to the terminal and into any transcript or CI log.
+ */
 const NOISE_OPTS = new Set([
   "confirm",
+  "approve",
+  "allowDuplicate",
   "json",
   "output",
   "dryRun",
@@ -133,8 +196,12 @@ const NOISE_OPTS = new Set([
   "fields",
   "field",
   "template",
+  "view",
+  "redact",
   "all",
   "maxRecords",
+  "readOnly",
+  "auditLog",
 ]);
 
 /**
@@ -190,6 +257,15 @@ export async function gateWrite(
     throw ReadOnlyError.forCommand(path);
   }
 
+  // Duplicate protection runs before approval: re-approving a payment that already
+  // went through is exactly the mistake this is here to catch, so asking first would
+  // invite the user to wave it past.
+  if (spec.risk === "money" && !isDryRunEnabled() && !opts.allowDuplicate) {
+    const fp = fingerprint(path, positionals, opts);
+    const previous = findDuplicate(readLedger(), fp, new Date());
+    if (previous) throw duplicateError(path, previous);
+  }
+
   const decision = decideConfirmation({
     path,
     hasConfirmFlag: Boolean(opts.confirm),
@@ -197,6 +273,8 @@ export async function gateWrite(
     dryRun: isDryRunEnabled(),
     nonInteractive: isNonInteractiveMode(),
     effect: spec.effect,
+    approveToken: typeof opts.approve === "string" ? opts.approve : undefined,
+    expectedToken: expectedApprovalToken(),
   });
 
   if (decision.action === "proceed") {
@@ -248,15 +326,35 @@ export function enableFinancialConfirmation(program: Command): string[] {
     if (typeof original !== "function" || internal.__financialWired) continue;
     internal.__financialWired = true;
 
-    if (!cmd.options.some((o) => o.long === "--confirm")) {
+    const longs = cmd.options.map((o) => o.long);
+    if (!longs.includes("--confirm")) {
       cmd.option("--confirm", "Approve this write without an interactive prompt");
+    }
+    if (!longs.includes("--approve")) {
+      cmd.option(
+        "--approve <token>",
+        "Approve using the token in DOLIBARR_APPROVAL_TOKEN (for unattended runs)",
+      );
+    }
+    // Only money movements are fingerprinted, so only they get the override.
+    if (spec.risk === "money" && !longs.includes("--allow-duplicate")) {
+      cmd.option(
+        "--allow-duplicate",
+        "Permit a movement identical to one this CLI already performed",
+      );
     }
     cmd.addHelpText(
       "after",
       `\nThis command ${spec.risk === "money" ? "moves money" : "changes server state"} and` +
         "\nrequires confirmation: you are prompted interactively, and --confirm is" +
         "\nmandatory in non-interactive mode. Set DOLIBARR_ASSUME_YES=1 to approve" +
-        "\nautomatically in trusted automation. --dry-run previews without approving.",
+        "\nautomatically in trusted automation, or pass --approve <token> matching" +
+        "\nDOLIBARR_APPROVAL_TOKEN. --dry-run previews without approving." +
+        (spec.risk === "money"
+          ? "\n\nDuplicate protection: an identical movement (same account, amount, date" +
+            "\nand reference) already performed by this CLI is refused. Override with" +
+            "\n--allow-duplicate. This only sees writes made by this CLI on this machine."
+          : ""),
     );
 
     internal._actionHandler = async (args: unknown[]) => {
@@ -289,7 +387,15 @@ export function enableFinancialConfirmation(program: Command): string[] {
         return exitWithError(err, isJsonMode(opts));
       }
 
-      return original(args);
+      const result = await original(args);
+
+      // Record only after the command returned without throwing. Recording before
+      // would block a legitimate retry of a payment that never actually happened —
+      // the opposite of the mistake this is guarding against.
+      if (spec.risk === "money" && !isDryRunEnabled()) {
+        recordMovement(path, fingerprint(path, positionals, opts), new Date());
+      }
+      return result;
     };
 
     wired.push(path);

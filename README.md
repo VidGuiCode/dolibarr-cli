@@ -7,7 +7,7 @@ Unofficial CLI for [Dolibarr ERP](https://www.dolibarr.org) — full REST API co
 Requires Node.js 20+ and npm.
 
 ```bash
-npm install -g https://github.com/VidGuiCode/dolibarr-cli/releases/download/v0.6.2/dolibarr-cli-0.6.2.tgz
+npm install -g https://github.com/VidGuiCode/dolibarr-cli/releases/download/v0.6.3/dolibarr-cli-0.6.3.tgz
 dolibarr --version
 dolibarr config init
 ```
@@ -410,6 +410,53 @@ DOLIBARR_ASSUME_YES=1 dolibarr invoices validate 42
 
 Batch runs compose with this rather than double-prompting: a batch confirms once for the
 whole selection, and each item inherits that approval.
+
+### Approval tokens
+
+For unattended runs where `--confirm` is too easy to supply by accident, `--approve` checks
+a secret the caller must have been given out of band:
+
+```bash
+export DOLIBARR_APPROVAL_TOKEN="a-secret-you-generated"
+dolibarr invoices pay 42 --amount 100 --approve "a-secret-you-generated"
+```
+
+A missing or mismatched token is refused — `--confirm` cannot rescue a wrong token, and the
+token is never echoed in the confirmation display or the audit log.
+
+### Duplicate-payment protection
+
+The hazard: a payment appears to fail — timeout, dropped connection, ambiguous error — but
+actually applied server-side. Re-running it moves the money twice, and Dolibarr accepts the
+second one because from its side nothing is wrong.
+
+The CLI keeps a local ledger of money movements it performed, fingerprinted by what makes
+two payments *the same payment*: command, account, amount, date and reference. An identical
+repeat within 30 days is refused:
+
+```bash
+dolibarr invoices pay 42 --amount 100 --date 2026-07-29 --confirm
+# ✗ Refusing a duplicate money movement: an identical `invoices pay` was already
+#   performed by this CLI at 2026-07-29T11:00:00Z.
+
+dolibarr invoices pay 42 --amount 100 --date 2026-07-29 --confirm --allow-duplicate
+```
+
+A movement is recorded only *after* the command succeeds, so a payment that genuinely
+failed can still be retried. This is a local guard: it cannot see payments made through the
+web UI or from another machine, and it says so rather than implying otherwise.
+
+### Audit log
+
+```bash
+dolibarr invoices pay 42 --amount 100 --confirm --audit-log ./writes.ndjson
+export DOLIBARR_AUDIT_LOG=~/dolibarr-writes.ndjson
+```
+
+One JSON object per line, recording every **mutating** call — method, endpoint, body,
+outcome, status. Reads are not logged; the trail exists to answer "what did this run
+change?". Sensitive body fields are redacted unconditionally, whether or not `--redact` was
+passed, and the API key is never written. Off by default.
 
 ## Batch operations
 

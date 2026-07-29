@@ -113,3 +113,45 @@ describe("financial confirmation reach", () => {
     expect(enableFinancialConfirmation(program)).toEqual([]);
   });
 });
+
+/**
+ * v0.6.3: batch and financial protections must compose, not conflict.
+ *
+ * The mechanism is wiring ORDER. The financial gate has to end up *inside* the batch
+ * wrapper, so a batch confirms once for the whole selection, sets `--confirm` on the
+ * command, and each item's gate then sees that approval. Wired the other way round, a
+ * 20-id batch would prompt 21 times.
+ */
+describe("batch composition", () => {
+  it("wires the financial gate before the batch layer in cli.ts", () => {
+    const gate = cliSource.indexOf("enableFinancialConfirmation(program)");
+    const batch = cliSource.indexOf("enableBatchIds(program)");
+    expect(gate).toBeGreaterThan(-1);
+    expect(batch).toBeGreaterThan(-1);
+    expect(gate).toBeLessThan(batch);
+  });
+
+  it("gives batchable financial commands exactly one --confirm flag", () => {
+    for (const p of wired) {
+      const cmd = leaves.find((l) => l.path === p)!.cmd;
+      const confirms = cmd.options.filter((o) => o.long === "--confirm");
+      expect(confirms.length, p).toBe(1);
+    }
+  });
+
+  it("offers --approve on every gated command", () => {
+    for (const p of wired) {
+      const cmd = leaves.find((l) => l.path === p)!.cmd;
+      expect(cmd.options.map((o) => o.long), p).toContain("--approve");
+    }
+  });
+
+  /** Only money movements are fingerprinted, so only they carry the override. */
+  it("offers --allow-duplicate on money commands and nowhere else", () => {
+    for (const p of wired) {
+      const cmd = leaves.find((l) => l.path === p)!.cmd;
+      const hasOverride = cmd.options.some((o) => o.long === "--allow-duplicate");
+      expect(hasOverride, p).toBe(financialWriteSpec(p)!.risk === "money");
+    }
+  });
+});

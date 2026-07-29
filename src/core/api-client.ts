@@ -6,6 +6,7 @@ import {
   ReadOnlyError,
 } from "./errors.js";
 import { isReadOnlyMode } from "./runtime.js";
+import { auditEntry, isAuditEnabled, recordAudit } from "./audit.js";
 import {
   AUTO_PAGE_SIZE,
   finishProgress,
@@ -150,7 +151,58 @@ export class DolibarrApiClient {
   }
 
   private async fetchWithRetry(path: string, options: FetchOptions = {}): Promise<Response> {
-    this.enforceReadOnly((options.method ?? "GET").toUpperCase(), path);
+    const method = (options.method ?? "GET").toUpperCase();
+    try {
+      this.enforceReadOnly(method, path);
+    } catch (err) {
+      this.audit(method, path, options.body, "blocked", {
+        error: err instanceof Error ? err.message : String(err),
+      });
+      throw err;
+    }
+
+    let res: Response;
+    try {
+      res = await this.sendWithRetry(path, options);
+    } catch (err) {
+      // A request that exhausted its retries, or died on the network, still happened —
+      // and an attempted write that may or may not have landed is exactly what an audit
+      // trail is for. Record it before rethrowing.
+      this.audit(method, path, options.body, "error", {
+        status: err instanceof DolibarrApiError ? err.status : undefined,
+        error: err instanceof Error ? err.message : String(err),
+      });
+      throw err;
+    }
+    this.audit(method, path, options.body, res.ok ? "success" : "error", { status: res.status });
+    return res;
+  }
+
+  /**
+   * Log a mutating call. Reads are not recorded — the audit trail exists to answer
+   * "what did this run change?", and drowning that in GETs would defeat it.
+   */
+  private audit(
+    method: string,
+    path: string,
+    body: string | undefined,
+    outcome: "success" | "error" | "blocked",
+    extra: { status?: number; error?: string } = {},
+  ): void {
+    if (method === "GET" || method === "HEAD") return;
+    if (!isAuditEnabled()) return;
+    let parsed: unknown = null;
+    if (body !== undefined) {
+      try {
+        parsed = JSON.parse(body);
+      } catch {
+        parsed = body;
+      }
+    }
+    recordAudit(auditEntry(method, path, parsed, outcome, extra));
+  }
+
+  private async sendWithRetry(path: string, options: FetchOptions = {}): Promise<Response> {
     const url = this.url(path);
     const fetchOptions: RequestInit = {
       headers: this.headers,

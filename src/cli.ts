@@ -71,6 +71,7 @@ program
     "--read-only",
     "Block every write (POST/PUT/DELETE) for this run, including raw. Exits 6 if one is attempted",
   )
+  .option("--audit-log <path>", "Append every mutating call to this file as NDJSON")
   .version(pkg.version)
   .helpCommand(true)
   .action(() => {
