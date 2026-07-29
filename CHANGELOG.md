@@ -1,5 +1,79 @@
 # Changelog
 
+## 0.6.0 - 2026-07-29
+
+Opens the **0.6.x safety line**. The 2026-07-29 investigation report rated exactly one item
+*Critical*: the CLI could move money with no confirmation step. It can't any more.
+
+### ⚠️ BREAKING CHANGE
+
+**Commands that move money or change a document's official state now require approval.**
+They previously fired the API call straight after argument parsing, so a mistyped or
+copy-pasted command moved real money with nothing in between. Deletes already confirmed;
+these did not.
+
+**Migration — one line:** add `--confirm` to the affected calls, or export
+`DOLIBARR_ASSUME_YES=1` once for the whole run.
+
+The rule is the one `delete` has always used, so there is now a single rule across the CLI:
+
+| Situation | Behavior |
+|---|---|
+| Interactive terminal | Shows the pending write, prompts you to type `yes` |
+| Non-interactive (cron, CI, piped) | **`--confirm` required**, else refuses with exit `3` |
+| `DOLIBARR_ASSUME_YES=1` | Approved automatically, with a notice on stderr |
+| `--dry-run` | Previews without approving — a dry run is **not** an approval |
+
+**28 commands across 12 groups are gated**, all from one wiring call:
+
+- **Money:** `pay`, `unpay`, `transfer`, `add-transaction`, `update-transaction`,
+  `delete-transaction`, `apply-credit-note`
+- **Document state:** `validate`, `close`, `reopen`, `set-draft`, `approve`
+- **Overwrite:** `documents upload --overwrite`
+- **Raw:** `raw POST` / `PUT` / `DELETE` — with an explicit warning. `raw GET` is untouched,
+  and gating `raw` is what stops the whole rule being bypassed by rewriting a call as
+  `raw POST`.
+
+Reads are entirely untouched.
+
+### Added
+
+- `src/core/financial-writes.ts` — `financialWriteSpec`, `decideConfirmation`,
+  `describeWrite`, `isAssumeYes`, `gateWrite`, `enableFinancialConfirmation`. The gate is a
+  **pure function**, so every branch is tested without moving a single euro.
+- The prompt shows **what is about to happen** — command, arguments and the meaningful
+  flags — rather than a bare yes/no. Flags that describe the run (`--json`, `--output`,
+  `--fields`) are filtered out of the display.
+- `--confirm` on every gated command that lacked one, plus help text naming the rule.
+
+### Design notes
+
+- **Classification is verb-based, not a hardcoded path list**, so a resource group added
+  later inherits the gate automatically instead of silently escaping it.
+- **`validate` is gated consistently across all 9 resources that have one.** Gating
+  `invoices validate` but not `supplier-invoices validate` would have been a trap.
+- **Wired innermost, before the batch layer.** A batch run confirms once for the whole
+  selection and sets `--confirm` on the command, which this gate then sees — so batch and
+  financial protections compose instead of prompting twice for the same approval.
+- **No pre-existing test needed changing.** Wiring the gate over the command tree rather
+  than editing 28 command bodies kept the entire 701-test compatibility contract intact.
+
+### Verification
+
+Exercised end-to-end against Dolibarr 20.0.4 — **without moving any money**, per the
+test-data safety rule. Verified: a financial write refuses in `--no-interactive` without
+`--confirm` and exits `3`; `--dry-run` passes through and still makes no API call;
+`--confirm` and `DOLIBARR_ASSUME_YES=1` each let the call through (proved against a
+non-existent record id, so the request reached the API and 404'd rather than transacting);
+`raw GET` is ungated while `raw POST` refuses; reads are unaffected.
+
+⚠️ **Flagged:** the interactive prompt path itself is covered by unit tests rather than a
+live TTY run, since the verification environment has no TTY.
+
+### Tests
+
+792 passing (701 pre-existing, all still green + 91 added across 0.5.7–0.6.0), build clean.
+
 ## 0.5.9 - 2026-07-29
 
 Final patch of the 0.5.x line. **API errors now tell you what to do about them**, and the

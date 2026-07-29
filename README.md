@@ -7,7 +7,7 @@ Unofficial CLI for [Dolibarr ERP](https://www.dolibarr.org) — full REST API co
 Requires Node.js 20+ and npm.
 
 ```bash
-npm install -g https://github.com/VidGuiCode/dolibarr-cli/releases/download/v0.5.9/dolibarr-cli-0.5.9.tgz
+npm install -g https://github.com/VidGuiCode/dolibarr-cli/releases/download/v0.6.0/dolibarr-cli-0.6.0.tgz
 dolibarr --version
 dolibarr config init
 ```
@@ -313,6 +313,42 @@ dolibarr thirdparties create --name "Test" --supplier --dry-run
 # No changes made.
 ```
 
+## Confirmation on financial writes
+
+> **Breaking change in v0.6.0.** Commands that move money or change a document's official
+> state no longer execute straight after argument parsing. They now require approval.
+
+Affected: every `pay` / `unpay` / `transfer` / `add-transaction` / `update-transaction` /
+`delete-transaction` / `apply-credit-note`, every `validate` / `close` / `reopen` /
+`set-draft` / `approve`, `documents upload --overwrite`, and `raw` with `POST`/`PUT`/`DELETE`.
+Reads are untouched, and `raw GET` is untouched.
+
+The rule is the one `delete` has always used, so there is a single rule across the CLI:
+
+| Situation | Behavior |
+|---|---|
+| Interactive terminal | You are shown the pending write and prompted to type `yes` |
+| Non-interactive (cron, CI, piped) | **`--confirm` is required**, otherwise the command refuses with exit `3` |
+| `DOLIBARR_ASSUME_YES=1` set | Approved automatically, with a notice on stderr |
+| `--dry-run` | Previews without approving — a dry run is not an approval |
+
+```bash
+# Interactive: prompts before moving anything
+dolibarr bank transfer --from 1 --to 2 --amount 500 --date 2026-07-29 --description "Rent"
+
+# Automation: approve the specific call
+dolibarr invoices pay 42 --amount 100 --confirm
+
+# Trusted automation: approve every such call for this process
+DOLIBARR_ASSUME_YES=1 dolibarr invoices validate 42
+```
+
+**Migrating an existing script:** add `--confirm` to the affected calls, or export
+`DOLIBARR_ASSUME_YES=1` once for the whole run.
+
+Batch runs compose with this rather than double-prompting: a batch confirms once for the
+whole selection, and each item inherits that approval.
+
 ## Batch operations
 
 Every mutating subcommand that takes a record id as its only positional argument also
@@ -610,7 +646,7 @@ Notes:
 | `0` | Success |
 | `1` | Generic error (including a batch where every item failed for an unclassified reason) |
 | `2` | Authentication or permission failure (HTTP 401 / 403) |
-| `3` | Validation error, or a prompt was required in non-interactive mode |
+| `3` | Validation error, or a prompt was required in non-interactive mode (including a financial write refused for want of `--confirm`) |
 | `4` | Rate limited (HTTP 429) |
 | `5` | **Partial batch failure** — some items applied, some failed |
 

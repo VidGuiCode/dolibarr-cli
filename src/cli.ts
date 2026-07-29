@@ -46,6 +46,7 @@ import { enableListFilters } from "./core/list-filters.js";
 import { enableAutoPaginate } from "./core/paginate.js";
 import { enableBulkInput } from "./core/bulk-input.js";
 import { enableOutputFormats } from "./core/formats.js";
+import { enableFinancialConfirmation } from "./core/financial-writes.js";
 
 const require = createRequire(import.meta.url);
 const pkg = require("../package.json") as { version: string };
@@ -108,7 +109,13 @@ program.addCommand(createKnowledgeCommand());
 program.addCommand(createMrpCommand());
 program.addCommand(createUpgradeCommand());
 
-// Innermost: splits an array/NDJSON payload into single-record runs, so an
+// Innermost of all: the financial-write gate must sit INSIDE the batch wrapper.
+// A batch run confirms once for the whole selection and sets --confirm on the
+// command, which this gate then sees — so batch and financial protections compose
+// instead of prompting twice for the same approval.
+enableFinancialConfirmation(program);
+
+// Splits an array/NDJSON payload into single-record runs, so an
 // outer batch over ids applies every record to each id.
 enableBulkInput(program);
 
