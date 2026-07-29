@@ -1,5 +1,5 @@
 import type { DolibarrConfig } from "./types.js";
-import { DolibarrApiError, DolibarrAuthError } from "./errors.js";
+import { DolibarrApiError, DolibarrAuthError, DolibarrParseError } from "./errors.js";
 import {
   AUTO_PAGE_SIZE,
   finishProgress,
@@ -78,6 +78,42 @@ export class DolibarrApiClient {
       return text || `HTTP ${res.status}`;
     } catch {
       return `HTTP ${res.status}`;
+    }
+  }
+
+  /**
+   * Read a successful response body without ever leaking a raw
+   * `Unexpected end of JSON input` to the user.
+   *
+   * Dolibarr does not always answer JSON on a 2xx: `accountancy/exportdata`
+   * returns an empty body when a period holds no exportable entries, and several
+   * endpoints stream plain text. So:
+   *   - empty body  -> `null` (the caller decides what "nothing" means)
+   *   - valid JSON  -> the parsed value
+   *   - other text  -> the raw string, which is the useful payload for exports
+   * A DolibarrParseError is only thrown when the body defeats even that, so an
+   * error the user sees always distinguishes an API failure from a CLI one.
+   */
+  private async parseSuccessBody(res: Response, method: string, path: string): Promise<unknown> {
+    let text: string;
+    try {
+      text = await res.text();
+    } catch (error) {
+      throw new DolibarrParseError(
+        `Could not read the response body from ${method} ${path}: ${error instanceof Error ? error.message : String(error)}`,
+        method,
+        path,
+      );
+    }
+
+    if (text.trim() === "") return null;
+
+    try {
+      return JSON.parse(text);
+    } catch {
+      // Not JSON. Dolibarr returns raw CSV/FEC content this way, so hand it back
+      // verbatim rather than failing on a body that is perfectly usable.
+      return text;
     }
   }
 
@@ -177,7 +213,7 @@ export class DolibarrApiClient {
       const errorText = await this.parseErrorBody(res);
       throw new DolibarrApiError(res.status, errorText, "GET", path, { response: errorText });
     }
-    return res.json() as Promise<T>;
+    return (await this.parseSuccessBody(res, "GET", path)) as T;
   }
 
   /**
@@ -259,7 +295,7 @@ export class DolibarrApiClient {
         response: errorText,
       });
     }
-    return res.json() as Promise<T>;
+    return (await this.parseSuccessBody(res, "POST", path)) as T;
   }
 
   async put<T>(path: string, body?: unknown): Promise<T> {
@@ -277,7 +313,7 @@ export class DolibarrApiClient {
         response: errorText,
       });
     }
-    return res.json() as Promise<T>;
+    return (await this.parseSuccessBody(res, "PUT", path)) as T;
   }
 
   /**
@@ -317,8 +353,8 @@ export class DolibarrApiClient {
       const errorText = await this.parseErrorBody(res);
       throw new DolibarrApiError(res.status, errorText, "DELETE", path, { response: errorText });
     }
-    const text = await res.text();
-    if (!text) return undefined as T;
-    return JSON.parse(text) as T;
+    const parsed = await this.parseSuccessBody(res, "DELETE", path);
+    // DELETE has always answered `undefined` on an empty body; keep that shape.
+    return (parsed === null ? undefined : parsed) as T;
   }
 }

@@ -1,5 +1,65 @@
 # Changelog
 
+## 0.5.7 - 2026-07-29
+
+Bug-fix patch against the shipped v0.5.6 build. **`accounting ledger` works again** — it
+had been unable to produce any export at all.
+
+```bash
+dolibarr accounting formats                                   # what this server accepts
+dolibarr accounting ledger --period currentyear --format fec > ledger.txt
+```
+
+### Fixed
+
+- **`accounting ledger` 404'd on every format.** Root cause: Dolibarr's
+  `GET /accountancy/exportdata` expects a **numeric export-model id**, but the CLI sent the
+  format *name* (`CSV`, `FEC`, `FEC2`) verbatim. The server rejected it with
+  `404 Not Found: Accountancy export format not found` from inside
+  `api_accountancy.class.php`. `--format` now resolves names to ids, so `--format fec`
+  sends `1000`. **This was a CLI defect, not a server misconfiguration.**
+- **`Unexpected end of JSON input` crash.** A 2xx response with an empty or non-JSON body
+  escaped as a raw `JSON.parse` error, which told the user nothing about whether the API or
+  the CLI had failed. Fixed at the API-client choke point, so it applies to **every**
+  command, not just accounting:
+  - empty body → `null` (callers decide what "nothing" means)
+  - non-JSON body → the raw text, which is the usable payload for CSV/FEC exports
+  - `DELETE` keeps answering `undefined` on an empty body — unchanged
+- A 404 from `accountancy/exportdata` now carries a hint naming the real cause instead of
+  the generic "Resource not found".
+
+### Added
+
+- **`dolibarr accounting formats`** — lists the 20 export models Dolibarr accepts, with
+  their numeric ids and descriptions. Supports `--json`.
+- `--format` accepts a canonical name (`fec`, `fec2`, `cegid`, `quadratus`, …), an alias
+  (`csv` → configurable, `sage50` → `sage50-swiss`), any case, or a **raw numeric id** —
+  the passthrough keeps the CLI usable against export models added by future Dolibarr
+  versions.
+- `--format` is now required on `accounting ledger`, with an error listing the accepted
+  values. Previously, omitting it crashed.
+- An empty export now reports *why* it is empty (no bound bookkeeping entries, or an
+  unconfigured export model) instead of printing nothing. The notice goes to **stderr**, so
+  redirecting stdout to a file still yields a byte-exact export.
+- `src/core/accounting-formats.ts` — `resolveExportFormat`, `exportFormatNames`,
+  `findExportFormatById`, and the format table, exported for direct testing.
+- `printNotice` in `src/core/output.ts` for pipeline-safe out-of-band messages.
+
+### Verification
+
+The export-model id table was confirmed twice over: against the Dolibarr 20.0.4 source
+(`AccountancyExport::$EXPORT_TYPE_*`) and by probing a live 20.0.4 server, which accepts
+exactly these 20 ids and rejects every other value. `--format fec` was exercised
+end-to-end against that instance and returned FEC content.
+
+⚠️ **Flagged:** the reference instance has no bound bookkeeping entries, so live exports
+returned the FEC header with no data rows. The request/response path is verified; the row
+content is not, because no instance was available with bindings configured.
+
+### Tests
+
+727 passing (701 pre-existing + 26 new), build clean.
+
 ## 0.5.6 - 2026-07-25
 
 Final release of the **0.5.x line — bulk, batch & scripting power**. **Scalar extraction**:

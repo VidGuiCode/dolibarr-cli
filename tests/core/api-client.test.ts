@@ -317,4 +317,78 @@ describe("DolibarrApiClient", () => {
       expect(res.data).toBe("plain text response");
     });
   });
+
+  /**
+   * Up to v0.5.6 a 2xx with an empty body escaped as a raw
+   * `Unexpected end of JSON input`, which told the user nothing about whether the
+   * API had failed or the CLI had. Dolibarr answers this way routinely — most
+   * visibly on `accountancy/exportdata` when a period holds no entries.
+   */
+  describe("non-JSON and empty success bodies", () => {
+    it("returns null from GET on an empty body instead of throwing", async () => {
+      const client = new DolibarrApiClient(baseOptions);
+      vi.spyOn(globalThis, "fetch").mockResolvedValue(new Response("", { status: 200 }));
+
+      await expect(client.get("accountancy/exportdata")).resolves.toBeNull();
+    });
+
+    it("returns null from GET on a whitespace-only body", async () => {
+      const client = new DolibarrApiClient(baseOptions);
+      vi.spyOn(globalThis, "fetch").mockResolvedValue(new Response("\n  \n", { status: 200 }));
+
+      await expect(client.get("accountancy/exportdata")).resolves.toBeNull();
+    });
+
+    it("hands back raw text when a GET body is not JSON", async () => {
+      const client = new DolibarrApiClient(baseOptions);
+      vi.spyOn(globalThis, "fetch").mockResolvedValue(
+        new Response("JournalCode\tJournalLib\r\nBQ\tBank\r\n", { status: 200 }),
+      );
+
+      await expect(client.get("accountancy/exportdata")).resolves.toBe(
+        "JournalCode\tJournalLib\r\nBQ\tBank\r\n",
+      );
+    });
+
+    it("still parses a normal JSON GET body", async () => {
+      const client = new DolibarrApiClient(baseOptions);
+      vi.spyOn(globalThis, "fetch").mockResolvedValue(
+        new Response(JSON.stringify([{ id: 1 }]), { status: 200 }),
+      );
+
+      await expect(client.get("invoices")).resolves.toEqual([{ id: 1 }]);
+    });
+
+    it("returns null from POST on an empty body", async () => {
+      const client = new DolibarrApiClient(baseOptions);
+      vi.spyOn(globalThis, "fetch").mockResolvedValue(new Response("", { status: 200 }));
+
+      await expect(client.post("invoices", { ref: "X" })).resolves.toBeNull();
+    });
+
+    it("returns null from PUT on an empty body", async () => {
+      const client = new DolibarrApiClient(baseOptions);
+      vi.spyOn(globalThis, "fetch").mockResolvedValue(new Response("", { status: 200 }));
+
+      await expect(client.put("invoices/1", { ref: "X" })).resolves.toBeNull();
+    });
+
+    it("keeps DELETE answering undefined on an empty body", async () => {
+      const client = new DolibarrApiClient(baseOptions);
+      vi.spyOn(globalThis, "fetch").mockResolvedValue(new Response("", { status: 200 }));
+
+      await expect(client.delete("invoices/1")).resolves.toBeUndefined();
+    });
+
+    it("does not mistake an error body for a parse problem", async () => {
+      const client = new DolibarrApiClient(baseOptions);
+      vi.spyOn(globalThis, "fetch").mockResolvedValue(
+        new Response(JSON.stringify({ error: { message: "Accountancy export format not found" } }), {
+          status: 404,
+        }),
+      );
+
+      await expect(client.get("accountancy/exportdata")).rejects.toThrow(DolibarrApiError);
+    });
+  });
 });

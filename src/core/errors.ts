@@ -27,6 +27,24 @@ export class DolibarrConfigError extends Error {
   }
 }
 
+/**
+ * The API answered successfully but the CLI could not make sense of the body.
+ * Kept distinct from DolibarrApiError so users can tell "the server rejected this"
+ * from "the server replied and we failed to read it" — the raw
+ * `Unexpected end of JSON input` that used to escape gave no such signal.
+ */
+export class DolibarrParseError extends Error {
+  constructor(
+    message: string,
+    public readonly method?: string,
+    public readonly path?: string,
+    public readonly bodySnippet?: string,
+  ) {
+    super(message);
+    this.name = "DolibarrParseError";
+  }
+}
+
 export class ValidationError extends Error {
   constructor(message: string) {
     super(message);
@@ -56,6 +74,12 @@ function getStatusHint(status: number, path?: string): string | null {
     case 403:
       return "Permission denied. Check API user permissions in Dolibarr.";
     case 404: {
+      if (path?.includes("accountancy/exportdata"))
+        return (
+          "Dolibarr rejected the export format. `format` must be a NUMERIC export-model id " +
+          "(e.g. 1000 = FEC), not a name.\n" +
+          "        Run: dolibarr accounting formats"
+        );
       if (path?.includes("thirdparties/"))
         return "Thirdparty not found. Check with: dolibarr thirdparties list";
       if (path?.includes("invoices/"))

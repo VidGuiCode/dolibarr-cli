@@ -143,7 +143,9 @@ dolibarr thirdparties bank-accounts create 3 --label Main --iban LU28... --bic B
 dolibarr thirdparties outstanding 3 --mode supplier   # unpaid purchase invoices for a supplier
 
 # Accounting
-dolibarr accounting ledger --period currentyear --format CSV
+dolibarr accounting formats                                  # export models this Dolibarr accepts
+dolibarr accounting ledger --period currentyear --format fec > ledger.txt
+dolibarr accounting ledger --period lastmonth --format 1000  # numeric model ids also work
 
 # Products
 dolibarr products list --type service

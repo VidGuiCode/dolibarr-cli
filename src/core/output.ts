@@ -5,6 +5,14 @@ export function printInfo(message: string): void {
   console.log(message);
 }
 
+/**
+ * Out-of-band notice for the user, written to stderr so it never contaminates
+ * piped stdout (an export redirected to a file must stay byte-exact).
+ */
+export function printNotice(message: string): void {
+  console.error(message);
+}
+
 export function printError(message: string): void {
   console.error(`\u2717  ${message}`);
 }
