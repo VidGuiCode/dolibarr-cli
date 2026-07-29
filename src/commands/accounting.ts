@@ -1,6 +1,7 @@
 import { Command } from "commander";
 import { createClient } from "../core/config-store.js";
 import { printInfo, printJson, printNotice, printTable } from "../core/output.js";
+import { withProgress } from "../core/progress.js";
 import { exitWithError, ValidationError } from "../core/errors.js";
 import {
   ACCOUNTING_EXPORT_FORMATS,
@@ -57,6 +58,7 @@ export function createAccountingCommand(): Command {
         // what produced "Accountancy export format not found" up to v0.5.6.
         const formatId = resolveExportFormat(opts.format);
 
+        const known = findExportFormatById(formatId);
         const client = createClient();
         const params: Record<string, string | number | undefined> = {
           period: opts.period,
@@ -64,10 +66,12 @@ export function createAccountingCommand(): Command {
           date_max: opts.to,
           format: formatId,
         };
-        const result = await client.get<unknown>("accountancy/exportdata", params);
+        const result = await withProgress(
+          `Exporting ${opts.period} ledger (${known?.name ?? formatId})`,
+          () => client.get<unknown>("accountancy/exportdata", params),
+        );
 
         if (result === null || result === "") {
-          const known = findExportFormatById(formatId);
           if (opts.json) {
             printJson({
               period: opts.period,

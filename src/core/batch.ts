@@ -10,6 +10,7 @@ import {
 } from "./errors.js";
 import { isDryRunEnabled, isNonInteractiveMode, isQuiet } from "./runtime.js";
 import { ask } from "./prompt.js";
+import { formatCount, startProgress } from "./progress.js";
 import { createClient } from "./config-store.js";
 import { walkLeaves } from "./command-tree.js";
 import {
@@ -274,12 +275,17 @@ export async function runBatch(
   setConfirmed();
 
   const results: BatchItemResult[] = [];
+  // Progress goes to stderr and stays silent unless stderr is a TTY, so it can never
+  // contaminate `--output json` redirected to a file.
+  const progress = startProgress(`${action}: ${formatCount(0, ids.length)}`);
   for (const id of ids) {
     if (chatty) printInfo(`\n→ ${action} ${id}`);
     const r = await runItem(() => perItem(id), json);
     results.push({ id, ...r });
+    progress.update(`${action}: ${formatCount(results.length, ids.length)}`);
     if (!json && !r.ok) printError(`${action} ${id} failed: ${r.error || "unknown error"}`);
   }
+  progress.stop();
 
   const code = batchExitCode(results);
   const succeeded = results.filter((r) => r.ok).length;

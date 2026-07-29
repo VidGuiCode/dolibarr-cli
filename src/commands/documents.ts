@@ -2,6 +2,7 @@ import * as fs from "node:fs";
 import * as path from "node:path";
 import { Command } from "commander";
 import { createClient } from "../core/config-store.js";
+import { withProgress } from "../core/progress.js";
 import { printInfo, printJson } from "../core/output.js";
 import { exitWithError } from "../core/errors.js";
 import {
@@ -103,7 +104,9 @@ export function createDocumentsCommand(): Command {
         if (dryRunJson("documents.upload", { filename, module: opts.module, ref: opts.ref })) return;
 
         const client = createClient();
-        const result = await client.post<unknown>("documents/upload", body);
+        const result = await withProgress(`Uploading ${filename}`, () =>
+          client.post<unknown>("documents/upload", body),
+        );
         if (opts.json) { printJson(result); return; }
         printInfo(`Uploaded ${filename}`);
       } catch (err) { exitWithError(err, Boolean(opts.json)); }

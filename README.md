@@ -7,7 +7,7 @@ Unofficial CLI for [Dolibarr ERP](https://www.dolibarr.org) — full REST API co
 Requires Node.js 20+ and npm.
 
 ```bash
-npm install -g https://github.com/VidGuiCode/dolibarr-cli/releases/download/v0.6.6/dolibarr-cli-0.6.6.tgz
+npm install -g https://github.com/VidGuiCode/dolibarr-cli/releases/download/v0.6.7/dolibarr-cli-0.6.7.tgz
 dolibarr --version
 dolibarr config init
 ```
@@ -312,6 +312,14 @@ dolibarr thirdparties create --name "Test" --supplier --dry-run
 # Would create thirdparty: { name: "Test", fournisseur: 1 }
 # No changes made.
 ```
+
+## Progress indicators
+
+Batch runs, accounting exports and document uploads show a live spinner with a counter.
+
+It is written to **stderr** and only when stderr is a terminal, so
+`dolibarr accounting ledger --format fec > ledger.txt` shows progress while the file
+stays byte-exact. Also off under `--quiet` and `--no-interactive`.
 
 ## Interactive pickers
 

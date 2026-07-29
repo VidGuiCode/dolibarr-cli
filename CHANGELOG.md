@@ -1,5 +1,49 @@
 # Changelog
 
+## 0.6.7 - 2026-07-29
+
+**Progress indicators** for the operations that actually take time — batch runs,
+accounting exports, and document uploads.
+
+### Added
+
+- A hand-rolled spinner with a live counter: `⠹ invoices validate: 7 of 20 (35%)`.
+- Wired into **batch runs** (per-item counter), **`accounting ledger`** exports, and
+  **`documents upload`**.
+- `startProgress`, `withProgress`, `formatCount`, `formatBytes` in
+  `src/core/progress.ts`, exported for direct testing.
+
+### Design notes
+
+- **No new dependency** — no `ora`. `commander` remains the only runtime dep.
+- **Everything is written to stderr, and only when stderr is a TTY.** stdout is the data
+  channel: a spinner frame in a piped JSON stream corrupts it. Note this checks *stderr*,
+  not stdout, so `dolibarr accounting ledger … > ledger.txt` still shows progress on the
+  terminal while the file stays byte-exact.
+- Also off under `--quiet` and `--no-interactive`, matching `--all`'s existing
+  page-progress behaviour.
+- **A disabled spinner is a no-op object, not a null check** at every call site, so
+  wiring it in cannot introduce a branch that forgets the disabled case.
+- **`withProgress` stops the spinner in a `finally`.** A spinner left running after an
+  error would keep overwriting the error message the user needs to read.
+
+### Fixed
+
+- A literal carriage return had ended up inside a template literal, and JavaScript
+  normalizes CR inside template literals to LF — so the stop sequence would have emitted
+  a newline instead of returning to column 0, leaving a stray blank line after every
+  spinner. Caught by a test asserting the redraw uses `` and never `
+`.
+
+### Verification
+
+Confirmed live that an export redirected to a file contains **zero** escape bytes, and
+that a two-item batch under `--json` produces valid JSON with zero escape bytes on stdout.
+
+### Tests
+
+974 passing (701 pre-existing, all still green), build clean.
+
 ## 0.6.6 - 2026-07-29
 
 **Interactive pickers.** Omit the id at a terminal and choose from a searchable list
