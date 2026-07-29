@@ -64,21 +64,33 @@ export class DolibarrApiClient {
     return false;
   }
 
-  private async parseErrorBody(res: Response): Promise<string> {
+  /**
+   * Pull both the human message and Dolibarr's `debug.source` out of an error body.
+   *
+   * `debug.source` is the most useful diagnostic the API emits and the CLI used to
+   * throw it away. It names the PHP file and the stage that failed, which is what
+   * separates "this route does not exist on this instance" from "it exists but the
+   * API user is not allowed" — two failures that otherwise look identical.
+   */
+  private async readErrorBody(res: Response): Promise<{ message: string; debugSource?: string }> {
+    let text: string;
     try {
-      const text = await res.text();
-      try {
-        const json = JSON.parse(text);
-        if (json?.error?.message) return json.error.message;
-        if (typeof json?.error === "string") return json.error;
-        if (typeof json === "string") return json;
-      } catch {
-        // not JSON
-      }
-      return text || `HTTP ${res.status}`;
+      text = await res.text();
     } catch {
-      return `HTTP ${res.status}`;
+      return { message: `HTTP ${res.status}` };
     }
+
+    try {
+      const json = JSON.parse(text);
+      const debugSource =
+        typeof json?.debug?.source === "string" ? json.debug.source : undefined;
+      if (json?.error?.message) return { message: json.error.message, debugSource };
+      if (typeof json?.error === "string") return { message: json.error, debugSource };
+      if (typeof json === "string") return { message: json, debugSource };
+    } catch {
+      // not JSON
+    }
+    return { message: text || `HTTP ${res.status}` };
   }
 
   /**
@@ -135,10 +147,15 @@ export class DolibarrApiClient {
         }
 
         if (attempt === this.maxRetries) {
-          const errorText = await this.parseErrorBody(res);
-          throw new DolibarrApiError(res.status, errorText, options.method ?? "GET", path, {
-            response: errorText,
-          });
+          const err = await this.readErrorBody(res);
+          throw new DolibarrApiError(
+            res.status,
+            err.message,
+            options.method ?? "GET",
+            path,
+            { response: err.message },
+            err.debugSource,
+          );
         }
 
         const retryAfterHeader = res.headers.get("Retry-After");
@@ -210,8 +227,15 @@ export class DolibarrApiClient {
       if (res.status === 401) {
         throw new DolibarrAuthError();
       }
-      const errorText = await this.parseErrorBody(res);
-      throw new DolibarrApiError(res.status, errorText, "GET", path, { response: errorText });
+      const err = await this.readErrorBody(res);
+      throw new DolibarrApiError(
+        res.status,
+        err.message,
+        "GET",
+        fullPath,
+        { response: err.message },
+        err.debugSource,
+      );
     }
     return (await this.parseSuccessBody(res, "GET", path)) as T;
   }
@@ -289,11 +313,15 @@ export class DolibarrApiClient {
       if (res.status === 401) {
         throw new DolibarrAuthError();
       }
-      const errorText = await this.parseErrorBody(res);
-      throw new DolibarrApiError(res.status, errorText, "POST", path, {
-        request: body,
-        response: errorText,
-      });
+      const err = await this.readErrorBody(res);
+      throw new DolibarrApiError(
+        res.status,
+        err.message,
+        "POST",
+        path,
+        { request: body, response: err.message },
+        err.debugSource,
+      );
     }
     return (await this.parseSuccessBody(res, "POST", path)) as T;
   }
@@ -307,11 +335,15 @@ export class DolibarrApiClient {
       if (res.status === 401) {
         throw new DolibarrAuthError();
       }
-      const errorText = await this.parseErrorBody(res);
-      throw new DolibarrApiError(res.status, errorText, "PUT", path, {
-        request: body,
-        response: errorText,
-      });
+      const err = await this.readErrorBody(res);
+      throw new DolibarrApiError(
+        res.status,
+        err.message,
+        "PUT",
+        path,
+        { request: body, response: err.message },
+        err.debugSource,
+      );
     }
     return (await this.parseSuccessBody(res, "PUT", path)) as T;
   }
@@ -350,8 +382,15 @@ export class DolibarrApiClient {
       if (res.status === 401) {
         throw new DolibarrAuthError();
       }
-      const errorText = await this.parseErrorBody(res);
-      throw new DolibarrApiError(res.status, errorText, "DELETE", path, { response: errorText });
+      const err = await this.readErrorBody(res);
+      throw new DolibarrApiError(
+        res.status,
+        err.message,
+        "DELETE",
+        path,
+        { response: err.message },
+        err.debugSource,
+      );
     }
     const parsed = await this.parseSuccessBody(res, "DELETE", path);
     // DELETE has always answered `undefined` on an empty body; keep that shape.

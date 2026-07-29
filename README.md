@@ -7,7 +7,7 @@ Unofficial CLI for [Dolibarr ERP](https://www.dolibarr.org) — full REST API co
 Requires Node.js 20+ and npm.
 
 ```bash
-npm install -g https://github.com/VidGuiCode/dolibarr-cli/releases/download/v0.2.6/dolibarr-cli-0.2.6.tgz
+npm install -g https://github.com/VidGuiCode/dolibarr-cli/releases/download/v0.5.9/dolibarr-cli-0.5.9.tgz
 dolibarr --version
 dolibarr config init
 ```

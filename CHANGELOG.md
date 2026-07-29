@@ -1,5 +1,70 @@
 # Changelog
 
+## 0.5.9 - 2026-07-29
+
+Final patch of the 0.5.x line. **API errors now tell you what to do about them**, and the
+README can no longer drift out of sync with the shipped version.
+
+Before:
+
+```text
+✗  API error 403: Forbidden
+     Hint: Permission denied. Check API user permissions in Dolibarr.
+```
+
+After:
+
+```text
+✗  API error 403: Forbidden
+     Request: GET /api/index.php/products?limit=1
+     Server:  api_products.class.php:212 at call stage
+     The route exists, but the API user is not permitted to use it.
+     Grant rights on "products" in Dolibarr: Home > Users & Groups > (your API user) > Permissions.
+     Confirm the module is enabled too: dolibarr setup modules
+```
+
+### Fixed
+
+- **README install snippet pointed at v0.2.6** while the package shipped 0.5.x — six
+  versions of drift, so anyone following the README installed a badly outdated release.
+
+### Added
+
+- **Actionable API errors** (report item 5.7). Every failure now reports the **exact
+  request path and parameters** that were sent, and Dolibarr's own `debug.source`, which
+  the CLI previously discarded. `debug.source` names the REST stage that failed, and that
+  is what separates two failures which otherwise look identical:
+  - **404 at the route stage** → the endpoint does not exist on this instance, which
+    almost always means the owning module is disabled. The message names the module and
+    points at `dolibarr setup modules`.
+  - **404 at the call stage** → the endpoint ran and found no record; verify the id.
+  - **403** → the route exists but the API user lacks rights, with the exact Dolibarr
+    screen to fix it on.
+  - **400 at the validate stage** → parameters were rejected before the call ran.
+- **A release guard against version drift.** `scripts/check-version-sync.mjs` asserts that
+  every README release-download URL and the newest CHANGELOG entry match `package.json`.
+  Wired two ways: `npm run check:version`, and a test in the suite — so `npm test`, already
+  the hard gate before release, now fails on drift.
+- `explainApiError` and `classifyFailureStage` in `src/core/errors.ts`, exported for
+  direct testing.
+- `DolibarrParseError` now renders a message that states plainly it is a **CLI-side**
+  failure rather than something Dolibarr returned.
+
+### Changed
+
+- `DolibarrApiError` carries a `debugSource` field, and GET errors now report the full
+  path **including the query string** rather than the bare path.
+
+### Verification
+
+Exercised live against Dolibarr 20.0.4 across all three shapes: a permission-gated module
+(403 at call stage), an absent route (404 at route stage), and a rejected parameter (400 at
+validate stage).
+
+### Tests
+
+764 passing (701 pre-existing + 63 added across 0.5.7–0.5.9), build clean.
+
 ## 0.5.8 - 2026-07-29
 
 Bug-fix patch. **`--limit` and `--page` now mean something on `bank transactions`** — they

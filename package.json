@@ -1,6 +1,6 @@
 {
   "name": "dolibarr-cli",
-  "version": "0.5.8",
+  "version": "0.5.9",
   "description": "Unofficial CLI for Dolibarr ERP",
   "license": "MIT",
   "private": false,
@@ -26,7 +26,8 @@
     "lint": "eslint src/**/*.ts",
     "lint:fix": "eslint src/**/*.ts --fix",
     "format": "prettier --write src/**/*.ts",
-    "format:check": "prettier --check src/**/*.ts"
+    "format:check": "prettier --check src/**/*.ts",
+    "check:version": "node scripts/check-version-sync.mjs"
   },
   "keywords": [
     "dolibarr",
