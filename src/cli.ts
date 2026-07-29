@@ -6,6 +6,7 @@ import { configureHelp } from "./core/help.js";
 import { createConfigCommand } from "./commands/config.js";
 import { createStatusCommand } from "./commands/status.js";
 import { createRawCommand } from "./commands/raw.js";
+import { createCompletionCommand } from "./commands/completion.js";
 import { createThirdpartiesCommand } from "./commands/thirdparties.js";
 import { createInvoicesCommand } from "./commands/invoices.js";
 import { createSupplierInvoicesCommand } from "./commands/supplier-invoices.js";
@@ -83,6 +84,9 @@ program
 program.addCommand(createConfigCommand());
 program.addCommand(createStatusCommand());
 program.addCommand(createRawCommand());
+// Takes a thunk so the completion script is generated from the FULLY wired tree,
+// including the flags the 0.5.x/0.6.x layers add after registration.
+program.addCommand(createCompletionCommand(() => program));
 
 // Business resource commands
 program.addCommand(createThirdpartiesCommand());

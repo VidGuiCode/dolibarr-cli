@@ -1,5 +1,45 @@
 # Changelog
 
+## 0.6.5 - 2026-07-29
+
+**Shell completions**, generated from the live command tree.
+
+```bash
+eval "$(dolibarr completion bash)"
+dolibarr completion zsh  > "${fpath[1]}/_dolibarr"
+dolibarr completion fish > ~/.config/fish/completions/dolibarr.fish
+```
+
+### Added
+
+- **`dolibarr completion bash|zsh|fish`** — completes group names, subcommands, and each
+  subcommand's flags.
+
+### Design notes
+
+- **Hand-rolled, no new dependency** — no `omelette`, no `tabtab`. `commander` remains
+  the only runtime dep.
+- **Generated from the tree as actually registered**, not from a hand-maintained list, so
+  completions cannot drift. That includes flags the 0.5.x/0.6.x wiring layers add *after*
+  a command file was written — `--view`, `--redact`, `--allow-duplicate` and friends all
+  appear, and a group added to `cli.ts` later needs no further work. Tests assert this
+  directly rather than trusting it.
+- The script goes to **stdout** and the install hint to **stderr**, so redirecting to a
+  file yields a clean script.
+- **fish emits flags per group; bash and zsh per subcommand.** Per-subcommand flags for
+  fish produced a ~440 KB file, and fish sources completion files eagerly, which is a real
+  shell-startup cost. Per-group is fish's usual granularity and brings it to ~106 KB. The
+  only cost is being offered a sibling subcommand's flag, which fish rejects if used.
+
+### Verification
+
+All three scripts generate against the real tree; the bash script passes `bash -n`
+syntax checking; an unsupported shell is rejected by name.
+
+### Tests
+
+926 passing (701 pre-existing, all still green), build clean.
+
 ## 0.6.4 - 2026-07-29
 
 Opens the **UX polish** stretch of 0.6.x. Colour-coded statuses in table output.

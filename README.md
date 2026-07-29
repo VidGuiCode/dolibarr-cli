@@ -7,7 +7,7 @@ Unofficial CLI for [Dolibarr ERP](https://www.dolibarr.org) — full REST API co
 Requires Node.js 20+ and npm.
 
 ```bash
-npm install -g https://github.com/VidGuiCode/dolibarr-cli/releases/download/v0.6.4/dolibarr-cli-0.6.4.tgz
+npm install -g https://github.com/VidGuiCode/dolibarr-cli/releases/download/v0.6.5/dolibarr-cli-0.6.5.tgz
 dolibarr --version
 dolibarr config init
 ```
@@ -312,6 +312,18 @@ dolibarr thirdparties create --name "Test" --supplier --dry-run
 # Would create thirdparty: { name: "Test", fournisseur: 1 }
 # No changes made.
 ```
+
+## Shell completions
+
+```bash
+eval "$(dolibarr completion bash)"                                    # bash
+dolibarr completion zsh  > "${fpath[1]}/_dolibarr"                    # zsh
+dolibarr completion fish > ~/.config/fish/completions/dolibarr.fish   # fish
+```
+
+Completes group names, subcommands and flags. The script is generated from the command
+tree this build actually has, so it stays in step automatically — including flags added
+by the batch, output and safety layers.
 
 ## Colour
 
