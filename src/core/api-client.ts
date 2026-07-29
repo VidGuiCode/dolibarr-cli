@@ -1,5 +1,11 @@
 import type { DolibarrConfig } from "./types.js";
-import { DolibarrApiError, DolibarrAuthError, DolibarrParseError } from "./errors.js";
+import {
+  DolibarrApiError,
+  DolibarrAuthError,
+  DolibarrParseError,
+  ReadOnlyError,
+} from "./errors.js";
+import { isReadOnlyMode } from "./runtime.js";
 import {
   AUTO_PAGE_SIZE,
   finishProgress,
@@ -129,7 +135,22 @@ export class DolibarrApiClient {
     }
   }
 
+  /**
+   * Refuse a state-changing request while read-only mode is active.
+   *
+   * Enforced HERE, inside the single function every request passes through, rather
+   * than per command. That is what makes read-only a guarantee instead of a promise:
+   * `raw POST` cannot slip past it, and any command added later inherits it without
+   * anyone remembering to opt in.
+   */
+  private enforceReadOnly(method: string, path: string): void {
+    if (method === "GET" || method === "HEAD") return;
+    if (!isReadOnlyMode()) return;
+    throw ReadOnlyError.forRequest(method, path);
+  }
+
   private async fetchWithRetry(path: string, options: FetchOptions = {}): Promise<Response> {
+    this.enforceReadOnly((options.method ?? "GET").toUpperCase(), path);
     const url = this.url(path);
     const fetchOptions: RequestInit = {
       headers: this.headers,

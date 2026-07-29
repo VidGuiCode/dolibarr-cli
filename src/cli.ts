@@ -66,6 +66,10 @@ program
   .option("--dry-run", "Show what would happen without executing")
   .option("--no-interactive", "Fail instead of prompting for input")
   .option("--compact", "Minify JSON output (strip whitespace only; does not reduce fields)")
+  .option(
+    "--read-only",
+    "Block every write (POST/PUT/DELETE) for this run, including raw. Exits 6 if one is attempted",
+  )
   .version(pkg.version)
   .helpCommand(true)
   .action(() => {

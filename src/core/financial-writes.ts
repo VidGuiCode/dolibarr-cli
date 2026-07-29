@@ -1,8 +1,14 @@
 import type { Command } from "commander";
-import { NonInteractiveError, ValidationError, exitWithError, getExitCode } from "./errors.js";
+import {
+  NonInteractiveError,
+  ReadOnlyError,
+  ValidationError,
+  exitWithError,
+  getExitCode,
+} from "./errors.js";
 import { printError, printJson, printNotice } from "./output.js";
 import { ask } from "./prompt.js";
-import { isDryRunEnabled, isNonInteractiveMode } from "./runtime.js";
+import { isDryRunEnabled, isNonInteractiveMode, isReadOnlyMode } from "./runtime.js";
 import { walkLeaves } from "./command-tree.js";
 
 /**
@@ -178,6 +184,12 @@ export async function gateWrite(
   positionals: unknown[],
   opts: Record<string, unknown>,
 ): Promise<boolean> {
+  // Fail fast: read-only is enforced at the API client regardless, but there is no
+  // point prompting for approval of a write that can never be sent.
+  if (isReadOnlyMode() && !isDryRunEnabled()) {
+    throw ReadOnlyError.forCommand(path);
+  }
+
   const decision = decideConfirmation({
     path,
     hasConfirmFlag: Boolean(opts.confirm),
@@ -265,7 +277,11 @@ export function enableFinancialConfirmation(program: Command): string[] {
           return process.exit(0);
         }
       } catch (err) {
-        if (err instanceof ValidationError || err instanceof NonInteractiveError) {
+        if (
+          err instanceof ValidationError ||
+          err instanceof NonInteractiveError ||
+          err instanceof ReadOnlyError
+        ) {
           if (isJsonMode(opts)) printJson({ status: "error", code: err.name, message: err.message });
           else printError(err.message);
           return process.exit(getExitCode(err));

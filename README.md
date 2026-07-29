@@ -7,7 +7,7 @@ Unofficial CLI for [Dolibarr ERP](https://www.dolibarr.org) — full REST API co
 Requires Node.js 20+ and npm.
 
 ```bash
-npm install -g https://github.com/VidGuiCode/dolibarr-cli/releases/download/v0.6.0/dolibarr-cli-0.6.0.tgz
+npm install -g https://github.com/VidGuiCode/dolibarr-cli/releases/download/v0.6.1/dolibarr-cli-0.6.1.tgz
 dolibarr --version
 dolibarr config init
 ```
@@ -312,6 +312,28 @@ dolibarr thirdparties create --name "Test" --supplier --dry-run
 # Would create thirdparty: { name: "Test", fournisseur: 1 }
 # No changes made.
 ```
+
+## Read-only mode
+
+Blocks **every** write for the whole run — `POST`, `PUT`, `DELETE`, including `raw`:
+
+```bash
+dolibarr invoices list --read-only          # fine
+dolibarr invoices validate 12 --read-only   # refused, exits 6
+dolibarr raw POST invoices --data '{}' --read-only   # also refused
+
+export DOLIBARR_READ_ONLY=1                 # for a whole cron job or agent session
+```
+
+This is enforced at the single function every API request passes through, not per
+command. That is what makes it a **guarantee rather than a promise**: it cannot be
+bypassed with `raw POST`, and any command added in future inherits it without anyone
+remembering to opt in. A blocked write exits **`6`**, which is distinct from a permission
+failure (`2`), so a script can tell "I wasn't allowed" from "I wasn't permitted".
+
+It is deliberately different from `--dry-run`. Dry run is per-command and previews what one
+mutation *would* do; read-only is a property of the entire process, and it is the thing to
+hand to a cron job or an AI agent.
 
 ## Confirmation on financial writes
 
@@ -649,6 +671,7 @@ Notes:
 | `3` | Validation error, or a prompt was required in non-interactive mode (including a financial write refused for want of `--confirm`) |
 | `4` | Rate limited (HTTP 429) |
 | `5` | **Partial batch failure** — some items applied, some failed |
+| `6` | **Blocked by read-only mode** — a write was attempted while `--read-only` / `DOLIBARR_READ_ONLY` was active |
 
 Code `5` only ever comes from a batch run. When every item of a batch fails, the batch exits
 with that shared underlying code (e.g. `2` for a permission-gated module) rather than `5`.

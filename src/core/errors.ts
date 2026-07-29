@@ -51,6 +51,33 @@ export class DolibarrParseError extends Error {
   }
 }
 
+/**
+ * A mutating request was attempted while read-only mode was active.
+ *
+ * Carries its own exit code (6) so a caller can tell "this run was blocked by its
+ * own safety setting" apart from a permission failure (2) or a validation error (3).
+ */
+export class ReadOnlyError extends Error {
+  constructor(what: string) {
+    super(
+      `Blocked by read-only mode: ${what}\n` +
+        `  This run cannot modify anything. Remove --read-only, or unset DOLIBARR_READ_ONLY,\n` +
+        `  to allow writes.`,
+    );
+    this.name = "ReadOnlyError";
+  }
+
+  /** Blocked at the API client — the request that was about to go out. */
+  static forRequest(method: string, path: string): ReadOnlyError {
+    return new ReadOnlyError(`${method} /api/index.php/${path.replace(/^\//, "")}`);
+  }
+
+  /** Blocked before prompting, because the command is a write whatever its arguments. */
+  static forCommand(path: string): ReadOnlyError {
+    return new ReadOnlyError(`\`${path}\` is a write command`);
+  }
+}
+
 export class ValidationError extends Error {
   constructor(message: string) {
     super(message);
@@ -66,6 +93,7 @@ export class NonInteractiveError extends Error {
 }
 
 export function getExitCode(error: unknown): number {
+  if (error instanceof ReadOnlyError) return 6;
   if (error instanceof DolibarrApiError && error.status === 429) return 4;
   if (error instanceof DolibarrApiError && (error.status === 401 || error.status === 403))
     return 2;

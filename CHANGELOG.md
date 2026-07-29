@@ -1,5 +1,52 @@
 # Changelog
 
+## 0.6.1 - 2026-07-29
+
+**Global read-only mode.** Turns "I hope this script doesn't change anything" into a
+provable guarantee — the single highest-leverage safety feature for cron jobs and agents.
+
+```bash
+dolibarr invoices list --read-only                    # fine
+dolibarr invoices validate 12 --read-only             # refused, exits 6
+dolibarr raw POST invoices --data '{}' --read-only    # also refused
+
+export DOLIBARR_READ_ONLY=1                           # for a whole session
+```
+
+### Added
+
+- **`--read-only` flag and `DOLIBARR_READ_ONLY=1` env** blocking every `POST`/`PUT`/
+  `DELETE` for the run, including `raw`.
+- **Exit code `6` — blocked by read-only mode.** Distinct from a permission failure (`2`),
+  so a script can tell "I wasn't allowed by my own safety setting" from "the server said
+  no". Added to the README exit-code table.
+- `isReadOnlyMode` in `src/core/runtime.ts` and `ReadOnlyError` (with `forRequest` /
+  `forCommand`) in `src/core/errors.ts`.
+
+### Design notes
+
+- **Enforced at the API-client choke point**, inside the single function every request
+  passes through — not per command. That is what makes it a guarantee rather than a
+  promise: `raw POST` cannot slip past it, and any command added later inherits it without
+  anyone remembering to opt in. Tests assert `fetch` is never even called.
+- **Distinct from `--dry-run` by design.** Dry run is per-command and previews what one
+  mutation would do; read-only is a property of the whole process.
+- Financial writes additionally fail *fast*, before the v0.6.0 prompt, since there is no
+  point asking approval for a write that can never be sent. The client-level check still
+  runs regardless — the command-level one is a courtesy, not the guarantee.
+
+### Verification
+
+Exercised live against Dolibarr 20.0.4: `raw POST` refused (the bypass route), a
+non-financial write (`thirdparties create`) refused at the client level even though the
+v0.6.0 command gate never sees it, `delete` refused, both the flag and the env form
+working, exit code `6` confirmed, and reads unaffected. Writes were confirmed still to work
+with read-only off.
+
+### Tests
+
+805 passing (701 pre-existing, all still green), build clean.
+
 ## 0.6.0 - 2026-07-29
 
 Opens the **0.6.x safety line**. The 2026-07-29 investigation report rated exactly one item
