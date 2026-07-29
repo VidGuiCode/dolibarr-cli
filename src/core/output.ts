@@ -1,5 +1,6 @@
 import { isCompactMode } from "./runtime.js";
 import { DolibarrApiError } from "./errors.js";
+import { visibleLength } from "./color.js";
 
 export function printInfo(message: string): void {
   console.log(message);
@@ -61,16 +62,28 @@ export function printJson(value: unknown): void {
   console.log(JSON.stringify(value, null, isCompactMode() ? undefined : 2));
 }
 
+/**
+ * Pad to a visible width. A coloured cell carries ANSI escapes that `padEnd` counts
+ * but the terminal does not draw, so measuring raw length would misalign every
+ * column to the right of a coloured one.
+ */
+function padVisible(cell: string, width: number): string {
+  const pad = width - visibleLength(cell);
+  return pad > 0 ? cell + " ".repeat(pad) : cell;
+}
+
 export function printTable(rows: string[][], headers?: string[]): void {
   if (rows.length === 0 && !headers) return;
   const allRows = headers ? [headers, ...rows] : rows;
-  const widths = allRows[0].map((_, i) => Math.max(...allRows.map((r) => (r[i] ?? "").length)));
+  const widths = allRows[0].map((_, i) =>
+    Math.max(...allRows.map((r) => visibleLength(r[i] ?? ""))),
+  );
   if (headers) {
-    console.log(headers.map((h, i) => h.padEnd(widths[i])).join("   "));
+    console.log(headers.map((h, i) => padVisible(h, widths[i])).join("   "));
     console.log(widths.map((w) => "\u2500".repeat(w)).join("   "));
   }
   for (const row of rows) {
-    console.log(row.map((cell, i) => (cell ?? "").padEnd(widths[i])).join("   "));
+    console.log(row.map((cell, i) => padVisible(cell ?? "", widths[i])).join("   "));
   }
 }
 

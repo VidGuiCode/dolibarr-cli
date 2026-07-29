@@ -15,6 +15,7 @@ import {
 } from "./formats.js";
 import { isDryRunEnabled } from "./runtime.js";
 import { isRedactRequested, redactItems, redactValue, resolveViewKeys } from "./views.js";
+import { colorizeStatus, isColorEnabled, isStatusColumn } from "./color.js";
 import type { OutputFormat } from "./types.js";
 
 /**
@@ -195,10 +196,12 @@ export function renderList(
   if (output === "ndjson") return printLines(renderNdjson(items));
   if (output === "yaml") return printLines(renderYaml(items));
 
+  const color = isColorEnabled({ output });
   const rows = items.map((i) =>
-    config.columns.map((c) =>
-      c.format ? c.format(i) : stringifyField(i[c.key]),
-    ),
+    config.columns.map((c) => {
+      const cell = c.format ? c.format(i) : stringifyField(i[c.key]);
+      return color && isStatusColumn(c) ? colorizeStatus(cell) : cell;
+    }),
   );
   if (output === "csv") {
     printCsv(rows, noHeader ? undefined : config.columns.map((c) => c.key));
@@ -266,10 +269,11 @@ export function renderGet(
     printCsv([row], noHeader ? undefined : keys);
     return;
   }
-  const rows = config.fields.map((f) => [
-    f.label,
-    f.format ? f.format(item) : stringifyField(item[f.key]),
-  ]);
+  const color = isColorEnabled({ output });
+  const rows = config.fields.map((f) => {
+    const cell = f.format ? f.format(item) : stringifyField(item[f.key]);
+    return [f.label, color && isStatusColumn(f) ? colorizeStatus(cell) : cell];
+  });
   printTable(rows, noHeader ? undefined : ["Field", "Value"]);
 }
 

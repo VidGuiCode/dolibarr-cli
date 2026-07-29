@@ -72,6 +72,7 @@ program
     "Block every write (POST/PUT/DELETE) for this run, including raw. Exits 6 if one is attempted",
   )
   .option("--audit-log <path>", "Append every mutating call to this file as NDJSON")
+  .option("--no-color", "Disable coloured status output (also honours NO_COLOR)")
   .version(pkg.version)
   .helpCommand(true)
   .action(() => {

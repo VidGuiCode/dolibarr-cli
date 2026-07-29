@@ -1,5 +1,46 @@
 # Changelog
 
+## 0.6.4 - 2026-07-29
+
+Opens the **UX polish** stretch of 0.6.x. Colour-coded statuses in table output.
+
+### Added
+
+- **Colour-coded statuses** — draft/open yellow, validated/approved/signed blue,
+  paid/closed/delivered green, abandoned/cancelled/refused red, inactive dim.
+- **`--no-color`**, alongside the `NO_COLOR` convention.
+
+### Design notes
+
+- **Hand-rolled ANSI, no new dependency.** `commander` remains the only runtime dep.
+- **Colour keys off the *rendered* label, not the raw Dolibarr status code.** Every
+  command already maps its own status vocabulary to words like "Draft" via its column
+  spec, so this works across all resources without threading resource identity through
+  the render layer.
+- **Grouped by meaning, not by resource**, so the same colour means the same thing
+  everywhere — every terminal-success state is green whether it is `paid`, `closed`,
+  `delivered` or `billed`.
+- **Degrades correctly, which matters more than the colour.** Off when stdout is piped,
+  under `json`/`csv`/`ndjson`/`yaml`, when `NO_COLOR` is set, on `TERM=dumb`, and with
+  `--no-color`. A colour escape in piped output is a regression, not a feature.
+- **An unrecognised status is left completely untouched** rather than guessed at.
+
+### Fixed
+
+- `printTable` measured raw string length, which counts ANSI escapes the terminal never
+  draws — every column after a coloured one would have been pushed out of alignment.
+  Widths and padding now use *visible* length. A test asserts a coloured table is
+  byte-identical to the plain one once escapes are stripped.
+
+### Verification
+
+Confirmed live that piped output contains no escape bytes at all, and that colour is
+suppressed under `--output json` and `NO_COLOR`.
+
+### Tests
+
+906 passing (701 pre-existing, all still green), build clean.
+
 ## 0.6.3 - 2026-07-29
 
 Closes the **safety block** (0.6.0–0.6.3). Approval tokens, an audit trail, and protection

@@ -7,7 +7,7 @@ Unofficial CLI for [Dolibarr ERP](https://www.dolibarr.org) — full REST API co
 Requires Node.js 20+ and npm.
 
 ```bash
-npm install -g https://github.com/VidGuiCode/dolibarr-cli/releases/download/v0.6.3/dolibarr-cli-0.6.3.tgz
+npm install -g https://github.com/VidGuiCode/dolibarr-cli/releases/download/v0.6.4/dolibarr-cli-0.6.4.tgz
 dolibarr --version
 dolibarr config init
 ```
@@ -312,6 +312,16 @@ dolibarr thirdparties create --name "Test" --supplier --dry-run
 # Would create thirdparty: { name: "Test", fournisseur: 1 }
 # No changes made.
 ```
+
+## Colour
+
+Table output colours record statuses by meaning — yellow for not-yet-committed
+(draft, open), blue for committed (validated, approved, signed), green for
+successfully finished (paid, closed, delivered), red for ended badly (abandoned,
+cancelled, refused).
+
+Colour is automatically off when stdout is piped, under any machine-readable
+`--output`, on `TERM=dumb`, when `NO_COLOR` is set, and with `--no-color`.
 
 ## Output views and redaction
 
