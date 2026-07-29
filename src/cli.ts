@@ -49,6 +49,7 @@ import { enableBulkInput } from "./core/bulk-input.js";
 import { enableOutputFormats } from "./core/formats.js";
 import { enableFinancialConfirmation } from "./core/financial-writes.js";
 import { enableViews } from "./core/views.js";
+import { enablePickers } from "./core/picker.js";
 
 const require = createRequire(import.meta.url);
 const pkg = require("../package.json") as { version: string };
@@ -146,6 +147,9 @@ enableOutputFormats(program);
 
 // Named field presets + redaction, on the same set of output-rendering commands.
 enableViews(program);
+
+// Outermost: an omitted id is resolved interactively before anything else reads it.
+enablePickers(program);
 
 configureHelp(program);
 

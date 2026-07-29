@@ -1,5 +1,40 @@
 # Changelog
 
+## 0.6.6 - 2026-07-29
+
+**Interactive pickers.** Omit the id at a terminal and choose from a searchable list
+instead of running a `list` first to find it.
+
+```bash
+dolibarr thirdparties get      # lists thirdparties; type to filter, or enter a number
+dolibarr bank transactions     # same, for bank accounts
+```
+
+### Added
+
+- Fuzzy pickers on **`thirdparties get`**, **`products get`**, **`bank get`** and
+  **`bank transactions`** when the id is omitted interactively.
+- Typing filters the list; a number selects; a single remaining match is taken
+  automatically; a blank line cancels.
+
+### Design notes
+
+- **Hand-rolled matching, no new dependency** — no `inquirer`, no `fuzzy`. The matcher is
+  a pure function, so ranking is tested without a terminal.
+- **Ranking is intentional, not just "contains":** a substring beats a scattered
+  subsequence, a prefix beats a later substring, and consecutive characters beat scattered
+  ones — so typing `acme` puts "Acme Corp" above "The Acme Corp".
+- **Read commands only, deliberately.** A picker on a mutation would mean an omitted id
+  silently resolves to whatever the user clicked, which is the opposite of the
+  explicitness 0.6.0–0.6.3 established. A test asserts no mutating command is wired.
+- **Non-interactive behaviour is unchanged, exactly.** A missing id still produces
+  commander's own `error: missing required argument 'id'` and exit `1`, byte-for-byte, so
+  existing scripts see no difference. Verified live.
+
+### Tests
+
+952 passing (701 pre-existing, all still green), build clean.
+
 ## 0.6.5 - 2026-07-29
 
 **Shell completions**, generated from the live command tree.

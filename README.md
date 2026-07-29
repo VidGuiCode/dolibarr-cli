@@ -7,7 +7,7 @@ Unofficial CLI for [Dolibarr ERP](https://www.dolibarr.org) — full REST API co
 Requires Node.js 20+ and npm.
 
 ```bash
-npm install -g https://github.com/VidGuiCode/dolibarr-cli/releases/download/v0.6.5/dolibarr-cli-0.6.5.tgz
+npm install -g https://github.com/VidGuiCode/dolibarr-cli/releases/download/v0.6.6/dolibarr-cli-0.6.6.tgz
 dolibarr --version
 dolibarr config init
 ```
@@ -312,6 +312,20 @@ dolibarr thirdparties create --name "Test" --supplier --dry-run
 # Would create thirdparty: { name: "Test", fournisseur: 1 }
 # No changes made.
 ```
+
+## Interactive pickers
+
+Omit the id at a terminal and pick from a searchable list:
+
+```bash
+dolibarr thirdparties get      # type to filter, or enter a number
+dolibarr products get
+dolibarr bank get
+dolibarr bank transactions
+```
+
+Read commands only — a picker never fires on a mutation. In non-interactive mode a
+missing id remains an error exactly as before.
 
 ## Shell completions
 
