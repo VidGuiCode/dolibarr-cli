@@ -2,6 +2,7 @@ import { Command } from "commander";
 import { createClient } from "../core/config-store.js";
 import { printInfo, printJson } from "../core/output.js";
 import { exitWithError } from "../core/errors.js";
+import { paginateClientSide, reportClientPagination } from "../core/client-paginate.js";
 import {
   addGetOptions,
   addListOptions,
@@ -211,17 +212,21 @@ export function createBankCommand(): Command {
       .command("transactions")
       .description("List transactions for a bank account")
       .argument("<account-id>", "Bank account ID")
-      .option("--limit <n>", "Results per page", "50")
-      .option("--page <n>", "Page number (0-indexed)", "0"),
+      .option("--limit <n>", "Results per page (applied by the CLI, see below)", "50")
+      .option("--page <n>", "Page number (0-indexed, applied by the CLI)", "0"),
   )
     .action(async (accountId, opts) => {
       try {
         const client = createClient();
-        const items = await client.get<Record<string, unknown>[]>(`bankaccounts/${accountId}/lines`, {
-          limit: opts.limit,
-          page: opts.page,
-        });
-        renderList(items, {
+        // Dolibarr's getLines($id, $sqlfilters) takes no limit/page — it returns
+        // every line whatever we send. Sending them anyway made --limit a lie and
+        // would make --all re-fetch the same full set per page. Fetch once, slice here.
+        const items = await client.get<Record<string, unknown>[]>(
+          `bankaccounts/${accountId}/lines`,
+        );
+        const paged = paginateClientSide(items ?? [], opts);
+        reportClientPagination(paged);
+        renderList(paged.rows, {
           opts,
           columns: [
             { key: "id", label: "ID" },
@@ -239,7 +244,13 @@ export function createBankCommand(): Command {
           ],
         });
       } catch (err) { exitWithError(err, Boolean(opts.json || opts.output === "json")); }
-    });
+    })
+    .addHelpText(
+      "after",
+      "\nNote: Dolibarr's bank-lines endpoint returns every transaction in one response —" +
+        "\nit has no server-side pagination. --limit/--page are therefore applied by the CLI" +
+        "\nafter fetching, and a truncated result is always reported on stderr.",
+    );
 
   cmd
     .command("transfer")

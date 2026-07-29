@@ -3,6 +3,7 @@ import { Command } from "commander";
 import { createClient } from "../core/config-store.js";
 import { printInfo, printJson } from "../core/output.js";
 import { exitWithError } from "../core/errors.js";
+import { paginateClientSide, reportClientPagination } from "../core/client-paginate.js";
 import {
   addGetOptions,
   addListOptions,
@@ -168,16 +169,18 @@ export function createCategoriesCommand(): Command {
       .description("List objects in a category")
       .argument("<id>", "Category ID")
       .requiredOption("--type <type>", "Object type (customer, supplier, product, contact, member)")
-      .option("--limit <n>", "Results per page", "50"),
+      .option("--limit <n>", "Max results (applied by the CLI, see below)", "50"),
   )
     .action(async (id, opts) => {
       try {
         const client = createClient();
+        // Same shape as bank lines: getObjects($id, $type, $onlyids) ignores limit.
         const items = await client.get<Record<string, unknown>[]>(`categories/${id}/objects`, {
           type: opts.type,
-          limit: opts.limit,
         });
-        renderList(items, {
+        const paged = paginateClientSide(items ?? [], opts);
+        reportClientPagination(paged);
+        renderList(paged.rows, {
           opts,
           columns: [
             { key: "id", label: "ID" },
@@ -189,7 +192,12 @@ export function createCategoriesCommand(): Command {
           ],
         });
       } catch (err) { exitWithError(err, Boolean(opts.json || opts.output === "json")); }
-    });
+    })
+    .addHelpText(
+      "after",
+      "\nNote: Dolibarr's category-objects endpoint returns every object in one response —" +
+        "\nit has no server-side pagination, so --limit is applied by the CLI after fetching.",
+    );
 
   cmd
     .command("link")

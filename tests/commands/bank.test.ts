@@ -18,6 +18,14 @@ function flags(cmd: Command): string[] {
   return cmd.options.map((o) => o.long ?? o.short ?? "").filter(Boolean);
 }
 
+/** Full rendered help, including `addHelpText` blocks that helpInformation() omits. */
+function helpText(cmd: Command): string {
+  let out = "";
+  cmd.configureOutput({ writeOut: (s) => { out += s; } });
+  cmd.outputHelp();
+  return out;
+}
+
 describe("bank command", () => {
   const cmd = createBankCommand();
 
@@ -148,5 +156,32 @@ describe("bank command", () => {
     const f = flags(sub(cmd, "update-transaction")!);
     expect(f).toContain("--label");
     expect(f).not.toContain("--date");
+  });
+
+  /**
+   * The 2026-07-29 report found `--limit 1` and `--limit 3` both returning all 8
+   * rows: Dolibarr's getLines($id, $sqlfilters) has no pagination arguments, so the
+   * flags were silently discarded. They are now applied client-side, and the help
+   * must say so rather than implying server-side paging.
+   */
+  describe("transactions pagination", () => {
+    const transactions = sub(cmd, "transactions")!;
+
+    it("still offers --limit and --page", () => {
+      const f = flags(transactions);
+      expect(f).toContain("--limit");
+      expect(f).toContain("--page");
+    });
+
+    it("says in the flag help that the CLI applies them", () => {
+      const limit = transactions.options.find((o) => o.long === "--limit")!;
+      const page = transactions.options.find((o) => o.long === "--page")!;
+      expect(limit.description).toContain("CLI");
+      expect(page.description).toContain("CLI");
+    });
+
+    it("documents that the endpoint has no server-side pagination", () => {
+      expect(helpText(transactions)).toContain("no server-side pagination");
+    });
   });
 });

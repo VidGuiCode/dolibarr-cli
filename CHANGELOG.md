@@ -1,5 +1,65 @@
 # Changelog
 
+## 0.5.8 - 2026-07-29
+
+Bug-fix patch. **`--limit` and `--page` now mean something on `bank transactions`** — they
+were being silently discarded by the server.
+
+```bash
+dolibarr bank transactions 2 --limit 3           # 3 rows, not all of them
+dolibarr bank transactions 2 --limit 3 --page 1  # the next 3
+dolibarr bank transactions 2 --all               # everything
+```
+
+### Fixed
+
+- **`bank transactions` ignored `--limit` / `--page`.** `--limit 1` and `--limit 3` both
+  returned every row. Root cause: Dolibarr's `GET /bankaccounts/{id}/lines` is
+  `getLines($id, $sqlfilters)` — it takes **no pagination arguments at all** and always
+  returns the whole collection. The CLI sent `limit`/`page` anyway and the server discarded
+  them. The flags are now applied **client-side** after fetching, so they do what the help
+  says.
+- **`categories objects` had the identical defect** — `getObjects($id, $type, $onlyids)`
+  also ignores `limit`. Fixed the same way.
+- **Latent `--all` duplication bug on `bank transactions`.** Because the server ignores
+  `page`, auto-pagination would have re-fetched the same full result set for every page and
+  appended it repeatedly, stopping only at the `--max-records` cap. An account with more
+  than 100 lines would have produced duplicate rows. The CLI no longer sends pagination
+  params to this endpoint, so the page walk cannot start.
+
+### Changed
+
+- Help text on both commands now states plainly that the endpoint has no server-side
+  pagination and that the CLI applies the flags — it previously implied normal paging.
+- A truncated result is reported on **stderr** (`Showing 1-3 of 8 …`), never silently. This
+  follows the existing "never cap silently" rule and keeps piped stdout byte-clean.
+- `categories objects` deliberately did **not** gain `--page`. Adding it would have wired
+  `--all` onto a command whose endpoint cannot page, trading one misleading flag for two.
+
+### Added
+
+- `src/core/client-paginate.ts` — `paginateClientSide`, `parseIntFlag`,
+  `reportClientPagination`, exported for direct testing.
+
+### Endpoint audit (report item 5.2)
+
+Every list command was checked for the same mismatch. Only two were affected, and both are
+fixed here. The other 26 command files build their query through `buildListQuery` and hit
+top-level Dolibarr `index()` routes, which genuinely honour `limit`/`page` — spot-verified
+live against Dolibarr 20.0.4. The exhaustive all-endpoint sweep remains scheduled for 0.8.5.
+
+### Verification
+
+Both fixes were exercised live against Dolibarr 20.0.4: `--limit 1` returns 1 row,
+`--limit 3` returns 3, `--page 0` and `--page 1` return disjoint records, `--all` returns
+all 8, and stdout remains valid JSON with the notice on stderr. `categories objects` could
+not be exercised live — the reference instance has no categories — so it ships verified by
+its Dolibarr 20.0.4 source signature and by unit tests. ⚠️ **Flagged.**
+
+### Tests
+
+750 passing (701 pre-existing + 49 added across 0.5.7–0.5.8), build clean.
+
 ## 0.5.7 - 2026-07-29
 
 Bug-fix patch against the shipped v0.5.6 build. **`accounting ledger` works again** — it

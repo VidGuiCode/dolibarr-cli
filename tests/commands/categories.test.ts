@@ -6,6 +6,14 @@ function sub(cmd: Command, name: string): Command | undefined {
   return cmd.commands.find((c) => c.name() === name);
 }
 
+/** Full rendered help, including `addHelpText` blocks that helpInformation() omits. */
+function helpText(cmd: Command): string {
+  let out = "";
+  cmd.configureOutput({ writeOut: (s) => { out += s; } });
+  cmd.outputHelp();
+  return out;
+}
+
 describe("categories command", () => {
   const cmd = createCategoriesCommand();
 
@@ -19,5 +27,17 @@ describe("categories command", () => {
     const link = sub(cmd, "link")!;
     // three positional args: <id> <type> <object-id>
     expect(link.registeredArguments.map((a) => a.name())).toEqual(["id", "type", "object-id"]);
+  });
+
+  /** Same defect as `bank transactions`: getObjects() takes no limit argument. */
+  it("documents that objects --limit is applied client-side", () => {
+    const objects = sub(cmd, "objects")!;
+    expect(objects.options.find((o) => o.long === "--limit")!.description).toContain("CLI");
+    expect(helpText(objects)).toContain("no server-side pagination");
+  });
+
+  it("does not offer --page on objects, which would imply paging it cannot do", () => {
+    const objects = sub(cmd, "objects")!;
+    expect(objects.options.map((o) => o.long)).not.toContain("--page");
   });
 });
