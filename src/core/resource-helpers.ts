@@ -14,6 +14,7 @@ import {
   validateTemplate,
 } from "./formats.js";
 import { isDryRunEnabled } from "./runtime.js";
+import { isRedactRequested, redactItems, redactValue, resolveViewKeys } from "./views.js";
 import type { OutputFormat } from "./types.js";
 
 /**
@@ -154,6 +155,10 @@ export function renderList(
   const output = resolveOutput(config.opts);
   const noHeader = headersSuppressed(config.opts);
 
+  // Redaction happens FIRST, before any projection or formatting, so a sensitive
+  // value cannot reach any output path — including --field and --template.
+  items = isRedactRequested(config.opts) ? redactItems(items) : items;
+
   // --field is the most specific request there is: one raw value per row.
   const field = resolveFieldOpt(config.opts);
   if (field) {
@@ -161,7 +166,11 @@ export function renderList(
     return;
   }
 
-  const fields = parseFields(config.opts);
+  // Both are resolved unconditionally: resolveViewKeys is what rejects the ambiguous
+  // --view + --fields combination, so it must not be short-circuited away.
+  const explicitFields = parseFields(config.opts);
+  const viewFields = resolveViewKeys(config.opts, items);
+  const fields = explicitFields ?? viewFields;
 
   // --template wins over --output: it *is* the output format.
   const template = config.opts.template as string | undefined;
@@ -212,13 +221,18 @@ export function renderGet(
   const output = resolveOutput(config.opts);
   const noHeader = headersSuppressed(config.opts);
 
+  // Redact before any projection or formatting, so no output path can leak a value.
+  item = isRedactRequested(config.opts) ? (redactValue(item) as Record<string, unknown>) : item;
+
   const field = resolveFieldOpt(config.opts);
   if (field) {
     printLines(renderField([item], field));
     return;
   }
 
-  const projected = parseFields(config.opts);
+  const explicitFields = parseFields(config.opts);
+  const viewFields = resolveViewKeys(config.opts, [item]);
+  const projected = explicitFields ?? viewFields;
 
   const template = config.opts.template as string | undefined;
   if (template) {

@@ -7,7 +7,7 @@ Unofficial CLI for [Dolibarr ERP](https://www.dolibarr.org) — full REST API co
 Requires Node.js 20+ and npm.
 
 ```bash
-npm install -g https://github.com/VidGuiCode/dolibarr-cli/releases/download/v0.6.1/dolibarr-cli-0.6.1.tgz
+npm install -g https://github.com/VidGuiCode/dolibarr-cli/releases/download/v0.6.2/dolibarr-cli-0.6.2.tgz
 dolibarr --version
 dolibarr config init
 ```
@@ -312,6 +312,46 @@ dolibarr thirdparties create --name "Test" --supplier --dry-run
 # Would create thirdparty: { name: "Test", fournisseur: 1 }
 # No changes made.
 ```
+
+## Output views and redaction
+
+Dolibarr returns very large objects — a single invoice carries ~130 fields, most of them
+null, plus notes, internal ids and contact data. `--view` picks a named preset instead of
+naming every key by hand:
+
+```bash
+dolibarr invoices list --view summary
+dolibarr invoices list --view accounting
+dolibarr bank transactions 2 --view reconciliation
+dolibarr thirdparties get 3 --view contact
+```
+
+| View | Shows |
+|---|---|
+| `summary` | id, ref, date, thirdparty, totals, status |
+| `accounting` | totals, VAT, due date, accountancy codes, remaining to pay |
+| `reconciliation` | dates, label, amount, statement number, bank account |
+| `contact` | name, email, phone, address |
+| `admin` | entity, status, creation/modification metadata |
+| `full` | everything (no projection) |
+
+A view is a *candidate* key list resolved against what each record actually carries — keys
+that are absent, or null on every row, are dropped rather than rendered as empty columns.
+So one view works across every resource and never invents a column.
+
+`--redact` masks sensitive values (IBAN/BIC/RUM, account numbers, notes, credentials,
+email/phone), keeping the key visible so a consumer can tell *withheld* from *absent*:
+
+```bash
+dolibarr thirdparties get 3 --redact --output json
+# "email": "[redacted]"
+```
+
+Redaction is applied before any projection or formatting, so it holds on every output
+path — including `--field` and `--template`.
+
+`--fields` and `--view` are mutually exclusive: passing both is rejected rather than
+silently resolved, the same rule `--field` vs `--fields` follows.
 
 ## Read-only mode
 

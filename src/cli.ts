@@ -47,6 +47,7 @@ import { enableAutoPaginate } from "./core/paginate.js";
 import { enableBulkInput } from "./core/bulk-input.js";
 import { enableOutputFormats } from "./core/formats.js";
 import { enableFinancialConfirmation } from "./core/financial-writes.js";
+import { enableViews } from "./core/views.js";
 
 const require = createRequire(import.meta.url);
 const pkg = require("../package.json") as { version: string };
@@ -136,6 +137,9 @@ enableAutoPaginate(program);
 
 // Adds the pipeline output flags to everything that renders output.
 enableOutputFormats(program);
+
+// Named field presets + redaction, on the same set of output-rendering commands.
+enableViews(program);
 
 configureHelp(program);
 

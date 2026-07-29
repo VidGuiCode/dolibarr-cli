@@ -1,5 +1,57 @@
 # Changelog
 
+## 0.6.2 - 2026-07-29
+
+**Named output views + sensitive-field redaction.** A single invoice carries ~130 fields,
+most of them null, plus notes, internal ids and contact data. `--fields` helped but meant
+knowing every key name in advance.
+
+```bash
+dolibarr invoices list --view summary          # 7 columns instead of 130 fields
+dolibarr bank transactions 2 --view reconciliation
+dolibarr thirdparties get 3 --redact           # "email": "[redacted]"
+```
+
+### Added
+
+- **`--view <name>`** on every command that renders output: `summary`, `accounting`,
+  `reconciliation`, `contact`, `admin`, `full`.
+- **`--redact`** masking sensitive values — IBAN/BIC/RUM, account numbers, notes,
+  credentials, email/phone — while keeping the key visible, so a consumer can tell
+  *withheld* from *absent*.
+- `src/core/views.ts` — `VIEWS`, `resolveViewName`, `viewKeysFor`, `resolveViewKeys`,
+  `redactValue`, `redactItems`, `isSensitiveKey`, `enableViews`, all exported for testing.
+
+### Design notes
+
+- **A view resolves against the data, not a fixed schema.** Candidate keys that the record
+  doesn't carry — or that are null on *every* row — are dropped rather than rendered as
+  empty columns. One view therefore works across all resources and never invents a column.
+  A view that would match nothing falls back to showing everything, since an empty table
+  reads as "no data" and that is worse than being verbose.
+- **Redaction is applied before any projection or formatting**, so it holds on every output
+  path. `--field` and `--template` bypass normal projection and would otherwise have been a
+  hole; tests assert all five `--output` formats plus both bypasses.
+- **Sensitive keys match exactly, never as substrings** — `email_template` is not redacted
+  just because it contains `email`.
+- **`--view` and `--fields` together are rejected**, not silently resolved. Same rule 0.5.6
+  set for `--field` vs `--fields`: confusable combinations fail loudly.
+- **Both flags are opt-in**, so default output is unchanged. v0.6.0 was the one intentional
+  break in this line; this is purely additive.
+- ⚠️ The flag is **`--view`**, not `--profile` — `--profile <name>` is reserved for
+  0.7.0 multi-instance config. A reach test asserts no command claims `--profile`.
+
+### Verification
+
+Exercised live against Dolibarr 20.0.4: an invoice went from 130 fields to 7 under
+`--view summary`; `--view accounting` and `--view contact` rendered correctly across list
+and detail; an unknown view and the `--view` + `--fields` combination were both rejected;
+and a real email was confirmed masked through `--fields`, `--field` and `--template`.
+
+### Tests
+
+846 passing (701 pre-existing, all still green), build clean.
+
 ## 0.6.1 - 2026-07-29
 
 **Global read-only mode.** Turns "I hope this script doesn't change anything" into a
