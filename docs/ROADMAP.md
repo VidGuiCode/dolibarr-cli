@@ -1,161 +1,219 @@
 # Roadmap
 
-Planned improvements and features for upcoming releases. This is a living document -- items may shift between releases or be dropped based on usage and feedback.
+Where dolibarr-cli is going. A living document — items may shift between releases or be
+dropped based on usage and feedback.
+
+**Current release: v0.6.8.** 34 commands — 29 resource groups plus `config`, `status`,
+`raw`, `completion` and `upgrade`. 998 tests. `commander` is still the only runtime dependency.
 
 ---
 
-## v0.1.0 — Core Release
+## How releases work here
 
-### Infrastructure
-
-- **API client** (`src/core/api-client.ts`) — fetch wrapper with `DOLAPIKEY` auth header, retries with exponential backoff + jitter, error mapping to typed exceptions
-- **Config store** (`src/core/config-store.ts`) — `~/.config/dolibarr-cli/config.json` read/write, env var override (`DOLIBARR_URL`, `DOLIBARR_API_KEY`), `createClient()` factory
-- **Output** (`src/core/output.ts`) — `printTable()` with auto-width columns, `printJson()` (respects `--compact`), `printError()`, `printInfo()`
-- **Errors** (`src/core/errors.ts`) — `exitWithError()` with status-specific exit codes (1=general, 2=auth, 3=validation, 4=rate limit), status hints for 401/403/404/500
-- **Types** (`src/core/types.ts`) — per-resource response types, shared pagination/sort/filter types
-- **Runtime** (`src/core/runtime.ts`) — `isDryRunEnabled()`, `isNonInteractiveMode()`, `isCompactMode()` flag detection from `process.argv`
-- **Prompt** (`src/core/prompt.ts`) — `ask(question, default?)` and `pickOne(prompt, items[])` readline-based interactive input
-- **Help** (`src/core/help.ts`) — custom Commander.js help formatter with ruled sections (`-- Commands --`, `-- Options --`)
-
-### CLI entry point
-
-- **Global options** — `--dry-run`, `--no-interactive`, `--compact`, `--json` on the root program
-- **Async parsing** — `program.parseAsync()` for proper async command support
-- **Version check** — compare installed version against latest GitHub release (with 1.5s timeout)
-- **Custom help** — ruled section formatting matching plane-cli / solidtime-cli style
-
-### Commands
-
-- **`dolibarr config`** — `init` (interactive setup with connection test), `show` (print current config), `set <key> <value>`
-- **`dolibarr status`** — server info, Dolibarr version, enabled modules, connection health check
-- **`dolibarr raw`** — `GET|POST|PUT|DELETE <path> [--data <json>]` escape hatch for any API endpoint
-- **`dolibarr thirdparties`** — `list`, `get`, `create`, `update`, `delete`, `merge`; filter by customer/supplier/prospect
-- **`dolibarr invoices`** — `list`, `get`, `create`, `update`, `delete`, `validate`, `pay`, `add-line`, `list-lines`; filter by status, thirdparty
-- **`dolibarr supplier-invoices`** — `list`, `get`, `create`, `update`, `delete`, `validate`, `pay`
-- **`dolibarr orders`** — `list`, `get`, `create`, `update`, `delete`, `validate`, `close`, `add-line`
-- **`dolibarr supplier-orders`** — `list`, `get`, `create`, `update`, `delete`, `validate`, `approve`
-- **`dolibarr proposals`** — `list`, `get`, `create`, `update`, `delete`, `validate`, `close`, `add-line`
-- **`dolibarr products`** — `list`, `get`, `create`, `update`, `delete`, `stock`; filter by type (product/service)
-- **`dolibarr contacts`** — `list`, `get`, `create`, `update`, `delete`
-- **`dolibarr bank`** — `list`, `get`, `create`, `transactions`, `transfer`
-- **`dolibarr categories`** — `list`, `get`, `create`, `update`, `delete`, `objects`; multi-type support (customer, supplier, product, etc.)
-- **`dolibarr documents`** — `list`, `upload`, `download`, `delete`; modulepart-based routing
-- **`dolibarr users`** — `list`, `get`, `create`, `update`
-- **`dolibarr setup`** — `modules` (list enabled), `company` (show info), `conf <name>` (get config constant)
-- **`dolibarr accounting`** — `ledger` (list bookkeeping entries)
-
-### Cross-cutting features
-
-- **`--output table|json|csv`** on all read commands for machine-readable output
-- **`--dry-run`** on all mutating commands — prints what would happen without executing
-- **`--limit`, `--page`, `--filter`, `--sort`** on all list commands — maps to Dolibarr's pagination, `sqlfilters`, and `sortfield`/`sortorder`
-- **`--from-json <file>`** on create commands — bulk-friendly alternative to individual flags
-- **`--confirm`** on delete commands — required in non-interactive mode, prompted interactively otherwise
-
-### Tests
-
-- **Vitest setup** — `vitest.config.ts`, test scripts in `package.json`
-- **Core unit tests** — api-client (retry logic, error mapping), config-store (load/save/env override), output (table formatting)
-- **Command integration tests** — mocked fetch responses for key CRUD flows
+- **Many small, focused releases.** One minor bump owns exactly one theme. Patch releases
+  between them are fixes and polish only — never new surface.
+- **Every release holds the same bar:** build, typecheck and lint clean; every pre-existing
+  test still green; `--json`/`--output` preserved on reads; `--dry-run` preserved on
+  mutations; `commander` still the only runtime dependency; `CHANGELOG.md` and
+  `package.json` bumped together.
+- **1.0.0 means "complete and stable"** — see [the 1.0 criteria](#100--stable-complete).
 
 ---
 
-## v0.1.2 — Internal refactor (2026-04-16)
+## Shipped
 
-Shipped refactor with no user-visible CLI surface changes, to make subsequent phases cheaper to add.
+### v0.1.x — Core
 
-- **`src/core/resource-helpers.ts`** — extracted shared command boilerplate: `addListOptions`, `buildListQuery`, `dryRunJson`, `prunePayload`, `confirmOrCancel`. 11 command files migrated to use the helpers.
-- **Tests** — 16 new unit tests for the helpers (total: 39).
+API client (`DOLAPIKEY` auth, retries with backoff, typed errors), config store with env
+overrides, table/JSON output, status-specific exit codes, custom help formatter. 17 command
+groups, `--dry-run`, `--json`, `sqlfilters` filtering, pagination. Internal refactor in
+v0.1.2 extracted the shared command boilerplate that everything since has been built on.
 
----
+### v0.2.x — Cross-cutting flags, then five new groups
 
-## v0.2 — Phased program (in progress)
+Field-validated fixes from real agent usage (Windows path handling in `raw`, payment-type
+codes, a slim default `list` view, `YYYY-MM-DD` dates everywhere), then ref-based lookup
+(`invoices get FA2501-0001`), CSV output, `--fields` projection, and the `projects`,
+`tickets`, `contracts`, `shipments` and `receptions` groups.
 
-Originally scoped as a single "Extended Resources & Deep Endpoint Coverage" release covering 5 new resource groups + 3 cross-cutting features + 60+ enhanced endpoints. Too big for one pass, so split into focused, independently-shippable phases.
+### v0.3.x — Deep endpoint coverage
 
-### Phase 3 → v0.2.0 — Cross-cutting features
+Made `raw` unnecessary for the groups already shipped. Editable `update` covering date,
+amount, supplier and line items; payment reversal and bank-line edits; invoice contacts,
+discounts and credit notes; order and proposal line editing and create-from-\*; thirdparty
+banking, categories and representatives; product variants, pricing and stock.
 
-The first **minor** bump of the v0.2 program. User-facing behavior:
+### v0.4.x — Ten new resource groups
 
-- **Ref-based lookup** — `dolibarr invoices get FA2501-0001` resolves the ref to an ID transparently against `GET /{resource}/ref/{ref}` (available on invoices, orders, proposals, projects, categories per Dolibarr swagger).
-- **`--output table|json|csv`** — first-class CSV output on all `list` / `get` commands, with RFC 4180 escaping. `--json` remains as a shortcut for `--output json`.
-- **`--fields a,b,c`** — project a subset of columns in table/CSV output.
+`interventions`, `expensereports`, `members`, `stock`, `supplier-proposals`, `tasks`,
+`agenda`, `multicurrencies`, `knowledge` and `mrp`. Every enabled Dolibarr module on a
+standard instance now has a command group.
 
-### v0.2.1 — Cold-start banner hotfix (shipped 2026-04-17)
+### v0.5.x — Bulk, batch & scripting
 
-- Synchronous update-check on fresh installs with no cache (1500ms budget) so the banner can appear on the first-ever invocation.
+Batch by IDs (`invoices validate 1,2,3`), status-scoped bulk (`--all-draft`), server-side
+list filters (`--from`/`--to`/`--min-amount`), `--all` auto-pagination, bulk create from a
+JSON array or piped NDJSON, pipeline output formats (`ndjson`, `yaml`, `--template`),
+and scalar extraction (`--field ref`) for xargs. Exit code **5** was introduced for a
+partially-applied batch, so a half-finished run is detectable rather than silent.
 
-### Phase 4a → v0.2.2 — `projects` + `tickets` (shipped 2026-04-17)
+### v0.6.x — Safety first, then polish
 
-- **`dolibarr projects`** — `list`, `get <id-or-ref>`, `create`, `update`, `delete`, `tasks <project-id>` (fifth ref-lookup resource).
-- **`dolibarr tickets`** — `list`, `get [id-or-ref]` (plus `--track-id <track>` to look up by public track ID), `create`, `update`, `delete`, `reply <track-id>` (posts to `/tickets/messages`).
-
-### Phase 4b → v0.2.3 — `contracts` + `shipments` + `receptions` (shipped 2026-04-17)
-
-- **`dolibarr contracts`** — `list`, `get`, `create`, `update`, `delete`, `validate`, `close`, `list-lines`, `activate-line`, `deactivate-line`.
-- **`dolibarr shipments`** — `list`, `get`, `create`, `delete`, `validate` (`--no-trigger`), `close`.
-- **`dolibarr receptions`** — `list`, `get`, `create`, `delete`, `validate` (`--no-trigger`), `close`.
-
-**v0.2 program complete** — 22 command groups total (17 at v0.1.0 → +5 in v0.2.*), ref-based lookup on 6 groups, CSV output, `--fields` projection, update banner, self-upgrade.
-
----
-
-## v0.3.0 — Deep endpoint coverage on existing resources
-
-Fills in the endpoints currently missing on resources we already ship. Largest surface expansion of the overall program, so it gets its own minor bump.
-
-- **`thirdparties`** — categories, representatives, bank accounts, outstanding invoices, notifications (remaining 27 endpoints)
-- **`invoices`** — contacts, discounts, create-from-order, credit notes
-- **`orders`** — create-from-proposal, create-shipment
-- **`products`** — attributes, attribute values, variants, purchase prices, multiprices, subproducts (30+ endpoints)
+Safety led the line: mandatory confirmation on 28 financial-write commands, a global
+`--read-only` mode enforced at the HTTP layer, output views (`--view summary|accounting|…`)
+plus `--redact`, an approval-token mechanism, an NDJSON audit log, and duplicate-payment
+detection. Then UX: colour-coded statuses, shell completions for bash/zsh/fish, interactive
+fuzzy pickers, progress indicators, and `--explain` — which tells you what a command will do
+and which safety gates apply, without running it.
 
 ---
 
-## v0.4.0+ — Automation, bulk, and new resource groups
+## Planned
 
-### New command groups
+### v0.7.x — Verification floor & configuration
 
-- **`dolibarr interventions`** — field service interventions with lines
-- **`dolibarr expensereports`** — expense reports with payment tracking
-- **`dolibarr members`** — association members, subscriptions, member types
-- **`dolibarr stock`** — stock movements (in/out), warehouse management
-- **`dolibarr supplier-proposals`** — supplier price requests
+Nothing here is a headline feature. All of it is what makes the accounting work that follows
+it trustworthy, and the project contributable.
 
-### Bulk operations
+- **v0.7.0 — Multi-profile config.** `--profile <name>`, `DOLIBARR_PROFILE`, and
+  `config profiles add|list|use|remove` for working against several Dolibarr instances.
+  Existing single-instance configs keep working untouched.
+- **v0.7.1 — CI & release hardening.** Build/typecheck/lint/test on every push and pull
+  request across Node 20/22 on Linux and Windows. A post-pack smoke test that installs the
+  packed `.tgz` into a temp directory and runs the binary before anything is released. Issue
+  and pull-request templates.
+- **v0.7.2 — Reproducible test instance.** A `docker-compose.yml` bringing up Dolibarr 20.x
+  with the modules this CLI touches enabled, a seed script, and a record/replay fixture layer
+  so integration tests run offline. This is also how a contributor gets a working instance in
+  one command.
+- **v0.7.3 — Pagination & completeness audit.** Every paginated endpoint audited for whether
+  the server actually honours `--limit`/`--page`, with client-side enforcement where it does
+  not, and a **completeness marker** on every list result so a truncated set can never be
+  mistaken for a full one.
+- **v0.7.4 — `setup extrafields`.** List, create, update and delete custom fields, and set
+  them on any `create`/`update`.
+- **v0.7.5 — `setup dictionaries`.** Payment terms, payment types, units, VAT rates. A wrong
+  dictionary value will error with the accepted values listed, instead of a bare 400.
+- **v0.7.6 — Secure key storage.** Optional OS keychain or credential-helper indirection
+  instead of a plaintext key in `config.json`.
 
-- **Batch by IDs** — `dolibarr invoices validate 1,2,3` operates on multiple resources
-- **`--all-draft`** — `dolibarr invoices validate --all-draft` validates all draft invoices in one go
-- **Export lists** — `dolibarr thirdparties list --all` bypasses pagination for full export
+### v0.8.x — Finance intelligence & reconciliation
 
-### Workflow shortcuts
+The line that turns endpoint access into a bookkeeping workflow. Everything here is
+read-only reporting except the statement import and the document actions.
 
-- **`invoices create-from-order`** — one-step order-to-invoice conversion
-- **`supplier-orders receive`** — mark goods as received with optional quantity
+- **v0.8.0 — `bank balance`.** A balance calculated from transaction lines, with credits,
+  debits, opening and closing figures, date filtering, and a clear separation between
+  calculated and server-reported values.
+- **v0.8.1 — `reconcile bank` + `bank import <csv>`.** Match a bank statement against
+  Dolibarr, flag unmatched lines in both directions, and import a statement.
+- **v0.8.2 — Invoice documents.** Build an invoice PDF from a record, fetch it, and
+  (where the API supports it) send it — so a validated invoice can reach a client without
+  leaving the CLI.
+- **v0.8.3 — Receivables & payables ageing.** `unpaid`, `overdue` and aged-bucket reports
+  for both customer and supplier invoices.
+- **v0.8.4 — Payment matching.** `reconcile invoices` and `reconcile suppliers`: matched,
+  unmatched and partial, in a shape an agent can act on.
+- **v0.8.5 — Anomaly detection.** Duplicate transactions and missing payment references,
+  each explaining why a row was flagged.
+- **v0.8.6 — Period close & accounting reports.** `reconcile period`, period-close blockers,
+  sales/purchase journals, VAT summaries, accounting-account mapping checks, and export
+  validation *before* a file is written.
+- **v0.8.7 — `admin health`.** One read-only command answering "is this instance sane?",
+  with an overall pass/fail and machine-readable per-check status.
+- **v0.8.8 — Instance audits.** Module readiness, API permission audit, user access review,
+  company information, document inventory and missing-document checks, backup readiness.
+
+### v0.9.x — Agent & integration surface
+
+Making the CLI a first-class tool for automation, rather than a human CLI that scripts scrape.
+
+- **v0.9.0 — `dolibarr schema`.** The entire command tree as JSON: every group, subcommand,
+  flag and argument with types and write classification, generated from the live tree so it
+  cannot drift.
+- **v0.9.1 — Stable error codes & consistent envelopes.** A machine-readable `code` on every
+  error (`MODULE_DISABLED`, `NO_PERMISSION`, `NOT_FOUND`, …) and one consistent JSON envelope
+  across every command. Includes flattening `status --output json`, which is a breaking
+  change and ships behind a deprecation window.
+- **v0.9.2 — MCP server mode.** `dolibarr mcp` exposing the CLI over the Model Context
+  Protocol. **Read commands only by default** — writes require an explicit flag, and
+  financial writes require another on top. Read-only mode, the audit log and duplicate
+  detection all apply.
+- **v0.9.3 — Audit readback & recovery.** The audit log is currently written and never read.
+  `audit show` reads it back, `audit verify` re-checks each recorded mutation against the live
+  record to detect a half-applied run, and bulk mutations can write a pre-run snapshot.
+
+### v0.10.x — Reliability, docs & the 1.0 run-up
+
+- **v0.10.0** — Respect `Retry-After`, smarter rate-limit backoff, and *reported* retries
+  rather than silently absorbed ones.
+- **v0.10.1** — Optional local response cache with a TTL for read-heavy scripts.
+- **v0.10.2** — Connection reuse and bounded concurrency for batch operations.
+- **v0.10.3** — `--verbose` / `DOLIBARR_DEBUG` request logging with the API key redacted,
+  on stderr so piped output stays byte-exact.
+- **v0.10.4** — Per-Dolibarr-version compatibility checks and broader integration coverage.
+- **v0.10.5** — `--watch` polling on `list`.
+- **v0.10.6** — Consistency pass with [plane-cli](https://github.com/VidGuiCode/plane-cli)
+  and [solidtime-cli](https://github.com/VidGuiCode/solidtime-cli) on flag names, config
+  layout and exit codes.
+- **v0.10.7** — Generated man pages, a runnable example on every subcommand's `--help`, and a
+  task-oriented cookbook.
+- **v0.10.8** — Surface freeze / release candidate: deprecation warnings for anything
+  changing at 1.0, and contract tests locking flag behaviour across every command group.
 
 ---
 
-## v0.5.0+ — Polish & Advanced Features
+## 1.0.0 — Stable "complete"
 
-### Output & UX
+Shipped when all of these are true:
 
-- **Shell completions** — bash, zsh, fish auto-complete for commands and options
-- **Color-coded statuses** — draft/validated/paid/abandoned shown in distinct colors
-- **Progress indicators** — progress bars for bulk operations and large exports
-- **Interactive selection** — fuzzy search when picking thirdparties, products, etc.
-
-### Advanced
-
-- **`setup extrafields`** — list, create, update custom fields on any resource
-- **`setup modules enable|disable`** — toggle Dolibarr modules from the CLI
-- **Multi-profile config** — manage connections to multiple Dolibarr instances, switch with `--profile`
-- **Webhook monitoring** — `dolibarr events watch` for real-time event streaming (if supported)
-
-### Reliability
-
-- **Post-pack smoke tests** — install `.tgz` into temp directory and verify binary works before publishing
-- **Rate limit handling** — respect `Retry-After` headers, automatic backoff
-- **Connection pooling** — reuse connections for batch operations
+- Every practical Dolibarr REST resource has a first-class command group *(done)*
+- The flag contract is frozen and documented, and semver guarantees begin
+- Power-user surface in: bulk/batch, completions, colour, multi-profile
+- **Safe for unattended use** — mandatory confirmation on financial writes, a global
+  read-only mode, redaction and safe output views, an audit trail that can be read back and
+  verified. Until that readback lands, treat the tool as **supervised-use only**
+- **Answers accounting questions, not just endpoint calls** — calculated balances,
+  reconciliation, ageing, period close, working exports
+- **Produces and delivers documents** — a validated invoice can become a PDF and reach a
+  client without leaving the CLI
+- **Usable by automation without scraping** — machine-readable schema, stable error codes,
+  MCP server mode
+- Reliability bar met — rate-limit handling, redacted debug logging, correct and
+  *provable* pagination on every endpoint, a post-pack smoke test in CI
+- Docs: README, cookbook and man pages, with the install snippet version-checked at release
+- `--json` kept as a documented alias for `--output json`
 
 ---
 
-Items beyond v0.4.0 will be added as the project evolves. Feedback and suggestions welcome via [GitHub Issues](https://github.com/VidGuiCode/dolibarr-cli/issues).
+## Under consideration
+
+Not committed. Feedback on any of these is genuinely useful — it is how items get promoted.
+
+- **Easier install** — a one-line install script, a Scoop manifest for Windows, a Homebrew
+  tap. (The project does not publish to the npm registry; releases are `.tgz` artifacts on
+  GitHub.)
+- **Per-command defaults in config** — set `--view accounting` once instead of on every call.
+- **Relative date windows** — `--from last-month`, `--from -30d`, `--period 2026-Q1`.
+- **`dolibarr open <group> <id>`** — open a record in the Dolibarr web UI.
+- **Recurring / template invoices** — wrap Dolibarr's template-invoice endpoints.
+- **`--since-last-run`** — incremental fetching for scheduled jobs.
+- **Payload templates** — named saved payloads for `create`.
+- **`dolibarr diff`** — compare two records, or a record against a snapshot.
+- **Multicompany `--entity` support.**
+- **Full-instance export** for backup or migration.
+
+### Deliberately out of scope
+
+- Publishing to the npm registry — distribution is via GitHub Releases.
+- A long-running daemon or webhook receiver — `--watch` covers the polling need.
+- Any heavy runtime dependency. `commander` is the only one; YAML output, the progress
+  spinner and shell completions are all hand-rolled, and that will not change.
+- A full interactive TUI — the fuzzy pickers in v0.6.6 covered the real need.
+- `POST /mos/{id}/produceandconsumeall` (MRP production) — irreversible stock consumption
+  with no inverse route. Deliberately unwrapped; use `raw` if you need it.
+
+---
+
+Feedback, bug reports and feature requests are welcome via
+[GitHub Issues](https://github.com/VidGuiCode/dolibarr-cli/issues).
